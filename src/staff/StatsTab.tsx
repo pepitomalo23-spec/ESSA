@@ -1,15 +1,15 @@
-import { Download, LoaderCircle } from "lucide-react";
+import { Download } from "lucide-react";
 import { useMemo } from "react";
-import { Screen } from "../components/Screen";
 import { StarsView } from "../components/Stars";
 import { dayKey } from "../lib/time";
 import { downloadCsv } from "./csv";
+import { Empty, Loading, Page } from "./Page";
 import { useResults } from "./useResults";
 
 export function StatsTab() {
   const { rows, error } = useResults();
 
-  const stats = useMemo(() => {
+  const s = useMemo(() => {
     const list = rows ?? [];
     const graded = list.filter((r) => r.status !== "left");
     const rated = list.filter((r) => r.rating);
@@ -21,105 +21,128 @@ export function StatsTab() {
         if (!item.ok) cur.failed++;
         fails.set(item.question, cur);
       }
+    const dist = [1, 2, 3, 4, 5].map((n) => rated.filter((r) => r.rating === n).length);
     return {
       total: list.length,
-      passPct: graded.length ? Math.round((graded.filter((r) => r.pass).length / graded.length) * 100) : 0,
-      avgPct: graded.length ? Math.round(graded.reduce((s, r) => s + (r.pct ?? 0), 0) / graded.length) : 0,
-      avgRating: rated.length ? (rated.reduce((s, r) => s + (r.rating ?? 0), 0) / rated.length).toFixed(1) : "—",
-      left: list.filter((r) => r.status === "left").length,
+      passPct: graded.length ? Math.round((graded.filter((r) => r.pass).length / graded.length) * 100) : null,
+      avgPct: graded.length ? Math.round(graded.reduce((acc, r) => acc + (r.pct ?? 0), 0) / graded.length) : null,
+      avgRating: rated.length ? rated.reduce((acc, r) => acc + (r.rating ?? 0), 0) / rated.length : null,
+      rated: rated.length,
+      left: list.length - graded.length,
+      dist,
       worst: [...fails.values()]
         .filter((f) => f.failed > 0)
         .sort((a, b) => b.failed / b.seen - a.failed / a.seen || b.failed - a.failed)
         .slice(0, 8),
-      reviews: rated.filter((r) => r.comment).slice(0, 12),
+      reviews: rated.filter((r) => r.comment).slice(0, 10),
     };
   }, [rows]);
 
-  if (!rows)
-    return (
-      <div className="flex justify-center py-16 text-muted">
-        {error ? <p className="alert alert-error">{error}</p> : <LoaderCircle className="animate-spin" />}
-      </div>
-    );
-
   return (
-    <Screen>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="section-title">Resumen de todas las evaluaciones</h2>
-        <button className="btn btn-outline btn-sm" disabled={!rows.length} onClick={() => downloadCsv(rows, "resultados_essa.csv")}>
-          <Download size={14} /> Exportar todo (CSV)
-        </button>
-      </div>
+    <Page
+      title="Estadísticas"
+      description="Resumen de todas las evaluaciones entregadas."
+      actions={
+        rows?.length ? (
+          <button className="btn btn-secondary btn-sm" onClick={() => downloadCsv(rows, "resultados_essa.csv")}>
+            <Download size={15} /> Exportar todo (CSV)
+          </button>
+        ) : null
+      }
+    >
+      {error && <p className="note note-error mb-5">{error}</p>}
+      {!rows ? (
+        <Loading />
+      ) : rows.length === 0 ? (
+        <Empty>Aún no hay datos. Las estadísticas aparecerán cuando se entregue el primer examen.</Empty>
+      ) : (
+        <div className="space-y-6">
+          <div className="sheet grid grid-cols-2 overflow-hidden lg:grid-cols-4 [&>*]:border-line [&>*:nth-child(-n+2)]:border-b lg:[&>*:nth-child(-n+2)]:border-b-0 [&>*:nth-child(odd)]:border-r lg:[&>*:not(:last-child)]:border-r">
+            <Kpi label="Alumnos evaluados" value={String(s.total)} note={`${s.left} abandonos`} />
+            <Kpi label="Aptos" value={s.passPct == null ? "—" : `${s.passPct} %`} note="de los que terminaron" />
+            <Kpi label="Nota media" value={s.avgPct == null ? "—" : `${s.avgPct} %`} note="de aciertos" />
+            <Kpi label="Valoración media" value={s.avgRating == null ? "—" : s.avgRating.toFixed(1).replace(".", ",")} note={`${s.rated} valoraciones`} />
+          </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Alumnos evaluados" value={String(stats.total)} />
-        <Kpi label="Aprobados" value={`${stats.passPct}%`} />
-        <Kpi label="Nota media" value={`${stats.avgPct}%`} />
-        <Kpi label="Valoración media" value={stats.avgRating} suffix={stats.avgRating !== "—" ? "/ 5" : ""} />
-      </div>
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+            <section className="sheet p-5 sm:p-6">
+              <h2 className="display text-2xl text-ink">Preguntas que más se fallan</h2>
+              <p className="mt-1 mb-5 text-sm text-muted">Porcentaje de alumnos que la fallaron, entre quienes la respondieron.</p>
+              {s.worst.length === 0 ? (
+                <p className="text-[15px] text-muted">Sin fallos registrados.</p>
+              ) : (
+                <ol className="space-y-4">
+                  {s.worst.map((f, i) => {
+                    const p = Math.round((f.failed / f.seen) * 100);
+                    return (
+                      <li key={f.question} className="grid grid-cols-[22px_1fr_auto] items-baseline gap-x-3">
+                        <span className="display tnum text-lg text-muted">{i + 1}</span>
+                        <div>
+                          <p className="text-[15px] text-ink">{f.question}</p>
+                          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-line">
+                            <div className="h-full bg-red" style={{ width: `${p}%` }} />
+                          </div>
+                        </div>
+                        <span className="tnum text-right text-sm">
+                          <span className="font-semibold text-ink">{p} %</span>
+                          <span className="block text-muted">
+                            {f.failed}/{f.seen}
+                          </span>
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </section>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div className="panel">
-          <h3 className="section-title">Preguntas que más se fallan</h3>
-          <p className="mb-4 text-xs text-muted">Porcentaje de alumnos que la fallaron entre quienes la respondieron.</p>
-          {stats.worst.length === 0 ? (
-            <p className="text-sm text-muted italic">Aún no hay fallos registrados.</p>
-          ) : (
-            <ul className="space-y-3.5">
-              {stats.worst.map((f) => {
-                const pct = Math.round((f.failed / f.seen) * 100);
-                return (
-                  <li key={f.question}>
-                    <div className="flex justify-between gap-3 text-sm">
-                      <span className="text-ink2">{f.question}</span>
-                      <span className="shrink-0 font-bold text-red tabular-nums">{pct}%</span>
+            <section className="sheet p-5 sm:p-6">
+              <h2 className="display text-2xl text-ink">Opiniones</h2>
+              {s.rated > 0 && (
+                <div className="mt-4 space-y-1.5">
+                  {[5, 4, 3, 2, 1].map((n) => {
+                    const c = s.dist[n - 1];
+                    return (
+                      <div key={n} className="grid grid-cols-[16px_1fr_28px] items-center gap-2 text-sm">
+                        <span className="tnum text-muted">{n}</span>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-line">
+                          <div className="h-full bg-[#e0a106]" style={{ width: `${(c / s.rated) * 100}%` }} />
+                        </div>
+                        <span className="tnum text-right text-muted">{c}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <ul className="mt-5 divide-y divide-line">
+                {s.reviews.length === 0 && <li className="py-3 text-[15px] text-muted">Todavía no hay comentarios.</li>}
+                {s.reviews.map((r) => (
+                  <li key={r.id} className="py-3.5 first:pt-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <StarsView value={r.rating ?? 0} />
+                      <span className="tnum text-xs text-muted">
+                        {r.city} · {dayKey(r.created_at)}
+                      </span>
                     </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-line">
-                      <div className="h-full rounded-full bg-red" style={{ width: `${pct}%` }} />
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted tabular-nums">
-                      {f.failed} de {f.seen} alumnos
-                    </div>
+                    <p className="mt-1.5 text-[15px] text-ink2">«{r.comment}»</p>
+                    <p className="mt-0.5 text-sm text-muted">{r.name}</p>
                   </li>
-                );
-              })}
-            </ul>
-          )}
+                ))}
+              </ul>
+            </section>
+          </div>
         </div>
-
-        <div className="panel">
-          <h3 className="section-title mb-4">Últimas opiniones</h3>
-          {stats.reviews.length === 0 ? (
-            <p className="text-sm text-muted italic">Todavía no hay comentarios.</p>
-          ) : (
-            <ul className="space-y-3">
-              {stats.reviews.map((r) => (
-                <li key={r.id} className="rounded-xl border border-line bg-paper p-3.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold text-ink">{r.name}</span>
-                    <StarsView value={r.rating ?? 0} />
-                  </div>
-                  <div className="text-[11px] text-muted">
-                    {r.city} · {dayKey(r.created_at)}
-                  </div>
-                  <p className="mt-1.5 text-sm text-ink2 italic">«{r.comment}»</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </Screen>
+      )}
+    </Page>
   );
 }
 
-function Kpi({ label, value, suffix = "" }: { label: string; value: string; suffix?: string }) {
+function Kpi({ label, value, note }: { label: string; value: string; note: string }) {
   return (
-    <div className="panel text-center">
-      <div className="font-display text-3xl font-bold text-ink tabular-nums">
-        {value} <span className="text-base text-muted">{suffix}</span>
-      </div>
-      <div className="mt-1 text-[11px] font-bold tracking-wide text-muted uppercase">{label}</div>
+    <div className="p-5 sm:p-6">
+      <p className="eyebrow">{label}</p>
+      <p className="display tnum mt-1 text-5xl text-ink">{value}</p>
+      <p className="mt-0.5 text-sm text-muted">{note}</p>
     </div>
   );
 }

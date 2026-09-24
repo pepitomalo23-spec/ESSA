@@ -1,9 +1,11 @@
 import { AnimatePresence } from "motion/react";
-import { ArrowLeft, Clock, Lock, LoaderCircle, Wifi } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
+import { EcgProgress } from "../components/Ecg";
+import { PinInput } from "../components/PinInput";
 import { Screen } from "../components/Screen";
 import { Shell } from "../components/Shell";
 import { StarPicker } from "../components/Stars";
@@ -37,9 +39,8 @@ export default function StudentApp() {
   const [attempt, setAttempt] = useState<Saved | null>(null);
   const [result, setResult] = useState<FinishResult | null>(null);
   const [notice, setNotice] = useState("");
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
-  // Información pública (ciudades, sesiones abiertas). Se refresca para el aviso "examen disponible".
+  // Información pública (ciudades, sesiones abiertas). Se refresca para el aviso de sala abierta.
   useEffect(() => {
     let alive = true;
     const load = () =>
@@ -79,7 +80,6 @@ export default function StudentApp() {
     save(null);
     setAttempt(null);
     setResult(null);
-    setProgress({ current: 0, total: 0 });
     setNotice(message);
     setStage("intro");
   }, []);
@@ -93,11 +93,11 @@ export default function StudentApp() {
 
   return (
     <Shell
-      ecg={stage === "quiz" ? progress : undefined}
+      context={attempt && stage !== "intro" ? <span className="hidden text-sm text-muted sm:inline">{attempt.name}</span> : null}
       footer={
         stage === "intro" && (
-          <Link to="/personal" className="text-xs text-muted/70 transition hover:text-ink">
-            Acceso personal ESSA
+          <Link to="/personal" className="inline-flex items-center gap-1 hover:text-ink">
+            Acceso del personal de ESSA <ArrowRight size={14} />
           </Link>
         )
       }
@@ -116,31 +116,27 @@ export default function StudentApp() {
             }}
           />
         )}
-        {stage === "waiting" && attempt && (
-          <Waiting key="waiting" attempt={attempt} onStart={goQuiz} onLeave={reset} />
-        )}
-        {stage === "quiz" && attempt && (
-          <Quiz key="quiz" attempt={attempt} onProgress={setProgress} onFinished={finished} onGone={reset} />
-        )}
-        {stage === "result" && attempt && result && (
-          <Result key="result" attempt={attempt} result={result} info={info} onHome={() => reset()} />
-        )}
+        {stage === "waiting" && attempt && <Waiting key="waiting" attempt={attempt} onStart={goQuiz} onLeave={reset} />}
+        {stage === "quiz" && attempt && <Quiz key="quiz" attempt={attempt} onFinished={finished} onGone={reset} />}
+        {stage === "result" && attempt && result && <Result key="result" attempt={attempt} result={result} info={info} onHome={() => reset()} />}
         {stage === "locked" && <Locked key="locked" onHome={() => reset()} />}
       </AnimatePresence>
     </Shell>
   );
 }
 
-// ── 1. Formulario de acceso ───────────────────────────────────────────────
-function Intro({
-  info,
-  notice,
-  onJoined,
-}: {
-  info: PublicInfo | null;
-  notice: string;
-  onJoined: (s: Saved, running: boolean) => void;
-}) {
+function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string; children?: ReactNode }) {
+  return (
+    <div className="mb-7">
+      <p className="eyebrow">{eyebrow}</p>
+      <h1 className="display mt-2 text-[40px] text-ink sm:text-5xl">{title}</h1>
+      {children && <p className="mt-3 max-w-[52ch] text-[17px] leading-relaxed text-ink2">{children}</p>}
+    </div>
+  );
+}
+
+// ── 1. Acceso ─────────────────────────────────────────────────────────────
+function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: string; onJoined: (s: Saved, running: boolean) => void }) {
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
   const [email, setEmail] = useState("");
@@ -153,11 +149,10 @@ function Intro({
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (name.trim().length < 2) return setError("Escribe tu nombre completo.");
-    if (!city) return setError("Selecciona tu ciudad o municipio.");
-    if (info?.require_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim()))
-      return setError("Escribe el email con el que te inscribiste.");
-    if (pin.length !== 6) return setError("El código de examen tiene 6 cifras.");
+    if (name.trim().length < 2) return setError("Escribe tu nombre y apellidos.");
+    if (!city) return setError("Elige tu ciudad o municipio.");
+    if (info?.require_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setError("Escribe el email con el que te inscribiste.");
+    if (pin.length !== 6) return setError("El código tiene 6 cifras. Pídeselo a tu instructor.");
     setBusy(true);
     try {
       const joined = await api.joinExam(city, pin, name.trim(), email.trim() || undefined);
@@ -172,106 +167,70 @@ function Intro({
 
   return (
     <Screen>
-      {!info && (
-        <div className="alert alert-info flex items-center gap-2.5 text-xs font-semibold">
-          <span className="live-dot bg-navy-mid" />
-          Conectando de forma segura con el servidor de ESSA…
-        </div>
-      )}
-      {notice && <div className="alert alert-warn">{notice}</div>}
+      <PageHead eyebrow={`Evaluación · ${info?.exam_title ?? "Primeros Auxilios"}`} title="Acceso al examen">
+        Escribe tus datos y el código de 6 cifras que te ha dado tu instructor.
+      </PageHead>
 
-      <form className="card" onSubmit={submit} noValidate>
-        <div className="mb-6 border-b border-line pb-5">
-          <h1 className="page-title sm:text-3xl">
-            Evaluación <span className="text-red uppercase">{info?.exam_title ?? "Primeros Auxilios"}</span>
-          </h1>
-          <p className="page-sub mt-2">
-            Introduce tus datos y el código PIN de examen que te ha dado tu instructor.
-          </p>
+      {notice && <p className="note note-warn mb-5">{notice}</p>}
+
+      <form className="sheet space-y-5 p-5 sm:p-7" onSubmit={submit} noValidate>
+        <div>
+          <label className="field-label" htmlFor="st-name">
+            Nombre y apellidos
+          </label>
+          <input id="st-name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="label" htmlFor="st-name">
-              Tu nombre completo
-            </label>
-            <input id="st-name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
-          </div>
-
-          <div>
-            <label className="label" htmlFor="st-city">
-              Ciudad o municipio
-            </label>
-            <select id="st-city" className="input" value={city} onChange={(e) => setCity(e.target.value)}>
-              <option value="">Selecciona tu ciudad</option>
-              {info?.cities.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {info?.require_email && (
-            <div>
-              <label className="label" htmlFor="st-email">
-                Email de inscripción
-              </label>
-              <input
-                id="st-email"
-                className="input"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                maxLength={160}
-              />
-            </div>
-          )}
-
-          <div>
-            <label className="label" htmlFor="st-pin">
-              Código del examen
-            </label>
-            <input
-              id="st-pin"
-              className="input text-center font-display text-2xl tracking-[0.4em]"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              placeholder="······"
-              value={pin}
-              maxLength={6}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-            />
-          </div>
-
+        <div>
+          <label className="field-label" htmlFor="st-city">
+            Ciudad o municipio del curso
+          </label>
+          <select id="st-city" className="input" value={city} onChange={(e) => setCity(e.target.value)} disabled={!info}>
+            <option value="">{info ? "Elige una opción" : "Cargando…"}</option>
+            {info?.cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
           {city && (
-            <div className={`alert ${openHere ? "alert-ok" : "alert-warn"}`}>
-              <div className="flex items-center gap-2 text-xs font-bold tracking-wide uppercase">
-                {openHere && <span className="live-dot bg-green" />}
-                {openHere ? `Examen disponible en ${city}` : `No hay exámenes activos en ${city}`}
-              </div>
-              <p className="mt-1 text-xs opacity-90">
-                {!openHere
-                  ? "Espera a que tu instructor abra la sesión de examen para esta ciudad."
-                  : openHere.status === "running"
-                    ? "El examen ya ha empezado. Introduce el PIN para unirte."
-                    : "La sala de espera está abierta. El examen comenzará en breve."}
-              </p>
-            </div>
-          )}
-
-          {error && (
-            <p className="alert alert-error" role="alert">
-              {error}
+            <p className={`status mt-2.5 text-[14px] ${openHere ? "status-green" : ""}`}>
+              {!openHere
+                ? `Ahora mismo no hay ningún examen abierto en ${city}.`
+                : openHere.status === "running"
+                  ? `Examen en curso en ${city}. Aún puedes entrar.`
+                  : `Sala de espera abierta en ${city}.`}
             </p>
           )}
-
-          <button type="submit" className="btn btn-cta mt-2 w-full py-4" disabled={busy}>
-            {busy ? <LoaderCircle size={18} className="animate-spin" /> : null}
-            ACCEDER A LA EVALUACIÓN
-          </button>
         </div>
+
+        {info?.require_email && (
+          <div>
+            <label className="field-label" htmlFor="st-email">
+              Email de inscripción
+            </label>
+            <input id="st-email" className="input" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={160} />
+            <p className="field-help">Solo pueden entrar los alumnos inscritos.</p>
+          </div>
+        )}
+
+        <div>
+          <label className="field-label" htmlFor="st-pin">
+            Código del examen
+          </label>
+          <PinInput id="st-pin" value={pin} onChange={setPin} />
+        </div>
+
+        {error && (
+          <p className="note note-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" className="btn btn-accent btn-lg w-full" disabled={busy}>
+          {busy && <LoaderCircle size={18} className="animate-spin" />}
+          Entrar al examen
+        </button>
       </form>
     </Screen>
   );
@@ -287,7 +246,7 @@ function Waiting({ attempt, onStart, onLeave }: { attempt: Saved; onStart: () =>
       try {
         const st = await api.attemptState(attempt.token);
         if (!alive) return;
-        if (!st) return onLeave("La sesión de examen se ha cerrado. Si tienes un nuevo código, vuelve a entrar.");
+        if (!st) return onLeave("La sesión de examen se ha cerrado. Si tienes un código nuevo, vuelve a entrar.");
         syncClock(st.now);
         if (st.session_status === "running") onStart();
         if (st.session_status === "closed") onLeave("El instructor ha cerrado la sesión de examen.");
@@ -308,49 +267,51 @@ function Waiting({ attempt, onStart, onLeave }: { attempt: Saved; onStart: () =>
     try {
       await api.finishAttempt(attempt.token, "left");
     } catch {
-      /* si falla, el instructor lo verá como pendiente y se limpia al cerrar */
+      /* se limpia al cerrar la sesión */
     }
     onLeave();
   }
 
   return (
     <Screen>
-      <button className="btn-back" onClick={leave} disabled={leaving}>
-        <ArrowLeft size={16} /> Salir de la sala
-      </button>
-      <div className="card text-center">
-        <div className="mx-auto mb-5 grid h-16 w-16 animate-pulse place-items-center rounded-full border border-red/20 bg-red-soft font-display text-sm font-bold text-red">
-          ESSA
-        </div>
-        <h2 className="page-title">
-          ¡Hola, <span className="text-red">{attempt.name.split(" ")[0]}</span>!
-        </h2>
-        <p className="page-sub mt-1">Has entrado en la sala de examen de {attempt.city}.</p>
+      <PageHead eyebrow={`Sala de espera · ${attempt.city}`} title={`Hola, ${attempt.name.split(" ")[0]}. Ya estás dentro.`}>
+        El examen empezará solo en esta pantalla cuando el instructor lo inicie.
+      </PageHead>
 
-        <div className="mx-auto mt-6 inline-flex items-center gap-2 rounded-full border border-line bg-bg px-4 py-2 text-xs font-semibold text-ink2">
-          <Wifi size={14} className="text-green" /> Conectado en tiempo real
+      <div className="sheet overflow-hidden">
+        <div className="flex items-center gap-3 border-b border-line bg-sunken px-5 py-3.5 sm:px-7">
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-sm bg-green opacity-40" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-sm bg-green" />
+          </span>
+          <span className="text-[15px] font-medium text-ink">Conectado · esperando al instructor</span>
         </div>
-
-        <div className="alert alert-warn mx-auto mt-6 max-w-sm text-xs font-semibold">
-          Esperando a que el instructor inicie el examen. No cierres esta ventana: empezará solo.
+        <div className="p-5 sm:p-7">
+          <h2 className="eyebrow mb-3">Antes de empezar</h2>
+          <ol className="space-y-3 text-[16px] text-ink2">
+            {[
+              "Silencia el móvil y cierra otras aplicaciones.",
+              "Durante el examen no cambies de pantalla ni de aplicación: si sales, el examen puede quedar bloqueado y tu instructor lo verá.",
+              "Cada respuesta se guarda al pulsar «Siguiente». Si se corta la conexión, vuelve a abrir esta página.",
+            ].map((t, i) => (
+              <li key={i} className="grid grid-cols-[24px_1fr] gap-2">
+                <span className="display tnum text-lg leading-6 text-red">{i + 1}</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
+
+      <button className="btn btn-ghost mt-5" onClick={leave} disabled={leaving}>
+        Salir de la sala
+      </button>
     </Screen>
   );
 }
 
 // ── 3. Examen ─────────────────────────────────────────────────────────────
-function Quiz({
-  attempt,
-  onProgress,
-  onFinished,
-  onGone,
-}: {
-  attempt: Saved;
-  onProgress: (p: { current: number; total: number }) => void;
-  onFinished: (r: FinishResult) => void;
-  onGone: (msg?: string) => void;
-}) {
+function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r: FinishResult) => void; onGone: (msg?: string) => void }) {
   const [questions, setQuestions] = useState<StudentQuestion[]>([]);
   const [idx, setIdx] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -373,12 +334,11 @@ function Quiz({
         }
       }
       finishing.current = false;
-      setError("No hemos podido entregar el examen. Comprueba tu conexión; tus respuestas están guardadas.");
+      setError("No hemos podido entregar el examen. Comprueba tu conexión: tus respuestas están guardadas.");
     },
     [attempt.token, onFinished],
   );
 
-  // Carga (o recupera) las preguntas asignadas.
   useEffect(() => {
     api
       .startAttempt(attempt.token)
@@ -393,14 +353,11 @@ function Quiz({
       .catch((e) => onGone(errorMessage(e)));
   }, [attempt.token, finish, onGone]);
 
-  useEffect(() => onProgress({ current: idx, total: questions.length }), [idx, questions.length, onProgress]);
-
-  // Fin del tiempo.
   useEffect(() => {
     if (endsAt && left === 0) finish("timed_out");
   }, [left, endsAt, finish]);
 
-  // Vigila si el instructor cierra la sesión o amplía el tiempo.
+  // Cierre de la sesión o tiempo ampliado por el instructor.
   useEffect(() => {
     const id = setInterval(async () => {
       try {
@@ -416,7 +373,7 @@ function Quiz({
     return () => clearInterval(id);
   }, [attempt.token, finish]);
 
-  // Bloqueo si el alumno sale de la pantalla.
+  // Aviso si el alumno sale de la pantalla.
   useEffect(() => {
     const onHide = () => {
       if (finishing.current) return;
@@ -432,8 +389,8 @@ function Quiz({
     };
   }, [attempt.token]);
 
-  async function next() {
-    if (selected === null) return;
+  const next = useCallback(async () => {
+    if (selected === null || saving) return;
     const q = questions[idx];
     setSaving(true);
     setError("");
@@ -447,118 +404,137 @@ function Quiz({
     } finally {
       setSaving(false);
     }
-  }
+  }, [selected, saving, questions, idx, attempt.token, finish]);
+
+  // Teclado: A–F o 1–6 para elegir, Intro para continuar.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (exitOpen || !questions[idx]) return;
+      const k = e.key.toLowerCase();
+      const n = "abcdef".indexOf(k) !== -1 ? "abcdef".indexOf(k) : "123456".indexOf(k);
+      if (n !== -1 && n < questions[idx].options.length) setSelected(n);
+      if (e.key === "Enter") next();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [questions, idx, next, exitOpen]);
 
   const q = questions[idx];
-  const urgent = left > 0 && left <= 30;
+  const tone = left <= 30 ? "text-red" : left <= 60 ? "text-amber" : "text-ink";
+  const isLast = idx + 1 === questions.length;
 
   return (
     <Screen>
       <Dialog
         open={exitOpen}
-        title="¿Seguro que quieres salir?"
-        confirmLabel="Salir del examen"
-        cancelLabel="Continuar examen"
+        title="¿Quieres salir del examen?"
+        confirmLabel="Salir y entregar incompleto"
+        cancelLabel="Seguir con el examen"
         onConfirm={() => {
           setExitOpen(false);
           finish("left");
         }}
         onCancel={() => setExitOpen(false)}
       >
-        Si abandonas o sales de la pantalla del examen, se registrará como incompleto y no podrás volver a entrar.
-        Tu instructor verá cuántas veces has salido.
+        Has salido de la pantalla del examen. Si sales, se entregará como incompleto y no podrás volver a entrar. Tu instructor verá cuántas veces has
+        salido.
       </Dialog>
 
-      <button className="btn-back" onClick={() => setExitOpen(true)}>
-        <ArrowLeft size={16} /> Cancelar examen
-      </button>
-
       {!q ? (
-        <div className="card flex items-center justify-center gap-3 py-16 text-sm text-muted">
+        <div className="flex items-center gap-3 py-24 text-muted">
           <LoaderCircle size={18} className="animate-spin" /> Preparando tus preguntas…
         </div>
       ) : (
-        <div className="card">
-          <div className="mb-2 flex items-center justify-between text-xs font-bold text-muted">
-            <span>
-              Pregunta {idx + 1} de {questions.length}
-            </span>
+        <>
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="eyebrow">Pregunta</p>
+              <p className="display tnum text-4xl text-ink">
+                {String(idx + 1).padStart(2, "0")}
+                <span className="text-2xl text-muted"> / {String(questions.length).padStart(2, "0")}</span>
+              </p>
+            </div>
             {endsAt && (
-              <span
-                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 tabular-nums ${urgent ? "animate-pulse bg-red-soft text-red" : "bg-bg text-ink2"}`}
-                aria-live={urgent ? "assertive" : "off"}
-              >
-                <Clock size={13} /> {formatClock(left)}
-              </span>
+              <div className="text-right" aria-live={left <= 30 ? "assertive" : "off"}>
+                <p className="eyebrow">Tiempo</p>
+                <p className={`display tnum text-4xl ${tone}`}>{formatClock(left)}</p>
+              </div>
             )}
           </div>
-          <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-line">
-            <div
-              className="h-full rounded-full bg-navy transition-all duration-300 dark:bg-navy-mid"
-              style={{ width: `${((idx + 1) / questions.length) * 100}%` }}
-            />
+
+          <div className="mt-3 mb-6">
+            <EcgProgress current={idx} total={questions.length} />
           </div>
 
-          <p className="mb-6 text-lg leading-relaxed font-bold text-ink" id="q-text">
-            {q.question}
-          </p>
+          <div className="sheet p-5 sm:p-7">
+            <h1 className="text-[21px] leading-snug font-semibold text-ink sm:text-2xl" id="q-text">
+              {q.question}
+            </h1>
 
-          <div className="space-y-3" role="radiogroup" aria-labelledby="q-text">
-            {q.options.map((opt, i) => (
-              <button
-                key={i}
-                type="button"
-                role="radio"
-                aria-checked={selected === i}
-                className="option flex items-center gap-3"
-                onClick={() => setSelected(i)}
-              >
-                <span
-                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-full border text-xs font-bold ${
-                    selected === i ? "border-navy bg-navy text-white dark:border-navy-mid dark:bg-navy-mid" : "border-line text-muted"
-                  }`}
-                >
-                  {String.fromCharCode(65 + i)}
-                </span>
-                {opt}
+            <div className="mt-6 space-y-2.5" role="radiogroup" aria-labelledby="q-text">
+              {q.options.map((opt, i) => {
+                const on = selected === i;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => setSelected(i)}
+                    className={`flex w-full cursor-pointer items-start gap-3.5 rounded-md border px-4 py-3.5 text-left text-[17px] transition-colors ${
+                      on ? "border-navy bg-navy-soft text-ink shadow-[inset_0_0_0_1px_var(--navy)]" : "border-line-strong bg-surface text-ink hover:border-muted hover:bg-sunken"
+                    }`}
+                  >
+                    <span
+                      className={`display grid h-7 w-7 shrink-0 place-items-center rounded text-base ${on ? "bg-navy text-on-navy" : "border border-line-strong text-muted"}`}
+                    >
+                      {String.fromCharCode(65 + i)}
+                    </span>
+                    <span className="pt-0.5">{opt}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {error && (
+              <p className="note note-error mt-5" role="alert">
+                {error}
+              </p>
+            )}
+
+            <div className="mt-7 flex items-center justify-between gap-4 border-t border-line pt-5">
+              <p className="hidden text-sm text-muted sm:block">
+                Teclas <kbd className="tag">A</kbd>–<kbd className="tag">{String.fromCharCode(64 + q.options.length)}</kbd> para elegir,{" "}
+                <kbd className="tag">Intro</kbd> para seguir
+              </p>
+              <button className={`btn ${isLast ? "btn-accent" : "btn-primary"} btn-lg w-full sm:w-auto sm:min-w-52`} onClick={next} disabled={selected === null || saving}>
+                {saving && <LoaderCircle size={17} className="animate-spin" />}
+                {isLast ? "Entregar examen" : "Siguiente"}
+                {!isLast && !saving && <ArrowRight size={17} />}
               </button>
-            ))}
+            </div>
           </div>
 
-          {error && (
-            <p className="alert alert-error mt-5" role="alert">
-              {error}
-            </p>
-          )}
-
-          <button className="btn btn-primary mt-6 w-full" onClick={next} disabled={selected === null || saving}>
-            {saving && <LoaderCircle size={17} className="animate-spin" />}
-            {idx + 1 === questions.length ? "Finalizar evaluación" : "Siguiente pregunta"}
+          <button className="btn btn-ghost mt-4 text-muted" onClick={() => setExitOpen(true)}>
+            Abandonar el examen
           </button>
-        </div>
+        </>
       )}
     </Screen>
   );
 }
 
 // ── 4. Resultado y valoración ─────────────────────────────────────────────
-function Result({
-  attempt,
-  result,
-  info,
-  onHome,
-}: {
-  attempt: Saved;
-  result: FinishResult;
-  info: PublicInfo | null;
-  onHome: () => void;
-}) {
+function Result({ attempt, result, info, onHome }: { attempt: Saved; result: FinishResult; info: PublicInfo | null; onHome: () => void }) {
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [onlyFailed, setOnlyFailed] = useState(false);
   const timedOut = result.status === "timed_out";
+  const items = result.breakdown ?? [];
+  const failed = items.filter((i) => !i.ok).length;
 
   async function sendRating() {
     setBusy(true);
@@ -576,44 +552,65 @@ function Result({
   const review = info?.google_review_url && rating >= (info?.review_threshold ?? 4);
 
   return (
-    <Screen>
-      <div className="card text-center">
-        {timedOut && (
-          <>
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-amber-soft text-amber">
-              <Clock size={26} />
-            </div>
-            <h2 className="page-title text-amber">¡Examen finalizado!</h2>
-            <p className="page-sub mt-1">
-              Se ha acabado el tiempo o el instructor ha cerrado la sesión. Tus respuestas hasta este momento están guardadas.
-            </p>
-          </>
-        )}
-        <div className="mt-2 font-display text-6xl font-bold text-ink tabular-nums">
-          {result.score}/{result.total}
-        </div>
-        <p className="mt-1 text-sm font-semibold text-muted">{result.pct}% de aciertos</p>
-        <span className={`badge mt-4 px-4 py-1.5 text-sm ${result.pass ? "badge-green" : "badge-red"}`}>
-          {result.pass ? "APTO / APROBADO" : "NO APTO / SUSPENSO"}
-        </span>
-
-        {result.breakdown && result.breakdown.length > 0 && (
-          <div className="mt-7 border-t border-line pt-6 text-left">
-            <h3 className="section-title mb-3">{timedOut ? "Respuestas enviadas antes del límite" : "Correcciones detalladas"}</h3>
-            <div className="max-h-[26rem] overflow-y-auto pr-1">
-              <Breakdown items={result.breakdown} />
-            </div>
-          </div>
-        )}
+    <Screen className="space-y-5">
+      <div>
+        <p className="eyebrow">Resultado · {attempt.city}</p>
+        <h1 className="display mt-2 text-[40px] text-ink sm:text-5xl">{timedOut ? "Tiempo agotado" : "Examen entregado"}</h1>
       </div>
 
+      {timedOut && <p className="note note-warn">Se acabó el tiempo o el instructor cerró la sesión. Se han corregido las respuestas que diste hasta ese momento.</p>}
+
+      <div className="sheet grid grid-cols-2 divide-x divide-line">
+        <div className="p-5 sm:p-7">
+          <p className="eyebrow">Aciertos</p>
+          <p className="display tnum mt-1 text-6xl text-ink sm:text-7xl">
+            {result.score}
+            <span className="text-3xl text-muted sm:text-4xl">/{result.total}</span>
+          </p>
+          <p className="tnum mt-1 text-[15px] text-muted">{result.pct} % de aciertos</p>
+        </div>
+        <div className="p-5 sm:p-7">
+          <p className="eyebrow">Calificación</p>
+          <p className={`display mt-1 text-5xl sm:text-6xl ${result.pass ? "text-green" : "text-red"}`}>{result.pass ? "APTO" : "NO APTO"}</p>
+          <p className="mt-1 text-[15px] text-muted">{result.pass ? "Has superado la evaluación." : "No has alcanzado la nota mínima."}</p>
+        </div>
+      </div>
+
+      {items.length > 0 && (
+        <div className="sheet p-5 sm:p-7">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="display text-2xl text-ink">Corrección</h2>
+            {failed > 0 && failed < items.length && (
+              <div className="inline-flex rounded-md border border-line-strong p-0.5 text-sm font-semibold" role="group" aria-label="Filtrar corrección">
+                {[
+                  [false, `Todas (${items.length})`],
+                  [true, `Fallos (${failed})`],
+                ].map(([v, label]) => (
+                  <button
+                    key={String(v)}
+                    aria-pressed={onlyFailed === v}
+                    onClick={() => setOnlyFailed(v as boolean)}
+                    className={`cursor-pointer rounded px-3 py-1.5 ${onlyFailed === v ? "bg-navy text-on-navy" : "text-ink2 hover:text-ink"}`}
+                  >
+                    {label as string}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Breakdown items={onlyFailed ? items.filter((i) => !i.ok) : items} numbered={!onlyFailed} />
+        </div>
+      )}
+
       {!sent ? (
-        <div className="card">
-          <h2 className="section-title">¿Cómo valoras el curso?</h2>
-          <p className="page-sub mt-1 mb-5">Tu opinión nos ayuda a seguir formando a los mejores socorristas.</p>
-          <StarPicker value={rating} onChange={setRating} />
-          <label className="label mt-6" htmlFor="st-comment">
-            Comentario u observaciones (opcional)
+        <div className="sheet p-5 sm:p-7">
+          <h2 className="display text-2xl text-ink">¿Qué te ha parecido el curso?</h2>
+          <p className="mt-1 text-[15px] text-ink2">Tu valoración llega a la escuela y nos ayuda a mejorar cada convocatoria.</p>
+          <div className="mt-5">
+            <StarPicker value={rating} onChange={setRating} />
+          </div>
+          <label className="field-label mt-5" htmlFor="st-comment">
+            Comentario <span className="font-normal text-muted">(opcional)</span>
           </label>
           <textarea
             id="st-comment"
@@ -621,36 +618,34 @@ function Result({
             value={comment}
             maxLength={1000}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="¿Qué te ha parecido el formador? ¿Qué podríamos mejorar?"
+            placeholder="Sobre el formador, las prácticas, el material…"
           />
-          {error && <p className="alert alert-error mt-4">{error}</p>}
-          <button className="btn btn-primary mt-5 w-full" onClick={sendRating} disabled={rating === 0 || busy}>
+          {error && <p className="note note-error mt-4">{error}</p>}
+          <button className="btn btn-primary mt-5" onClick={sendRating} disabled={rating === 0 || busy}>
             Enviar valoración
           </button>
         </div>
       ) : (
-        <div className="card text-center">
+        <div className="sheet p-5 sm:p-7">
           {review ? (
             <>
-              <h2 className="page-title text-lg">¡Muchísimas gracias!</h2>
-              <p className="page-sub mt-2 mb-6">
-                Nos alegra que hayas disfrutado de la formación. ¿Nos ayudas con una breve reseña en Google? Solo te costará un minuto.
-              </p>
-              <a href={info!.google_review_url!} target="_blank" rel="noopener noreferrer" className="btn btn-success w-full">
-                Dejar reseña en Google
+              <h2 className="display text-2xl text-ink">¡Gracias! ¿Nos dejas una reseña?</h2>
+              <p className="mt-1 text-[15px] text-ink2">Una reseña en Google ayuda a otros alumnos a encontrarnos. Solo lleva un minuto.</p>
+              <a href={info!.google_review_url!} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5">
+                Escribir reseña en Google <ArrowRight size={16} />
               </a>
             </>
           ) : (
             <>
-              <h2 className="page-title text-lg">Gracias por tu valoración</h2>
-              <p className="page-sub mt-2">Tomamos nota de tu comentario para seguir mejorando.</p>
+              <h2 className="display text-2xl text-ink">Gracias por tu valoración</h2>
+              <p className="mt-1 text-[15px] text-ink2">Tomamos nota de tus comentarios para la próxima convocatoria.</p>
             </>
           )}
         </div>
       )}
 
-      <button className="btn btn-outline w-full" onClick={onHome}>
-        Volver a la página de inicio
+      <button className="btn btn-secondary" onClick={onHome}>
+        Volver al inicio
       </button>
     </Screen>
   );
@@ -660,17 +655,12 @@ function Result({
 function Locked({ onHome }: { onHome: () => void }) {
   return (
     <Screen>
-      <div className="card text-center">
-        <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-red-soft text-red">
-          <Lock size={26} />
-        </div>
-        <h2 className="page-title">Examen cerrado por seguridad</h2>
-        <p className="page-sub mt-2">
-          Has salido de la pantalla durante la evaluación. Para evitar fraudes, el examen ha quedado bloqueado y registrado como
-          incompleto.
-        </p>
-        <p className="mt-3 text-xs text-muted">Habla con tu instructor de ESSA si ha sido un error involuntario.</p>
-        <button className="btn btn-outline mt-6 w-full" onClick={onHome}>
+      <PageHead eyebrow="Examen bloqueado" title="Has salido del examen">
+        Saliste de la pantalla durante la evaluación y elegiste no continuar. El examen se ha entregado como incompleto.
+      </PageHead>
+      <div className="sheet p-5 sm:p-7">
+        <p className="text-[16px] text-ink2">Si ha sido un error, habla con tu instructor: él puede ver el registro y decidir cómo seguir.</p>
+        <button className="btn btn-secondary mt-5" onClick={onHome}>
           Volver al inicio
         </button>
       </div>

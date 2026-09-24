@@ -1,15 +1,18 @@
-import { ArrowLeft, ChevronRight, Download, LoaderCircle, RefreshCw, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ChevronRight, Download, RefreshCw, Trash2 } from "lucide-react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
-import { Screen } from "../components/Screen";
 import { StarsView } from "../components/Stars";
 import type { Attempt, Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { dayKey, timeOf } from "../lib/time";
 import { downloadCsv } from "./csv";
-import { StatusBadge } from "./ExamTab";
+import { StatusText } from "./ExamTab";
+import { Empty, Loading, Page } from "./Page";
 import { useResults } from "./useResults";
+
+const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
+const graded = (list: Attempt[]) => list.filter((r) => r.status !== "left");
 
 export function HistoryTab({ me }: { me: Staff }) {
   const { rows, error, reload, setRows } = useResults();
@@ -23,7 +26,6 @@ export function HistoryTab({ me }: { me: Staff }) {
     for (const r of rows ?? []) map.set(r.city, [...(map.get(r.city) ?? []), r]);
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0], "es"));
   }, [rows]);
-
   const cityRows = useMemo(() => (rows ?? []).filter((r) => r.city === city), [rows, city]);
   const byDay = useMemo(() => {
     const map = new Map<string, Attempt[]>();
@@ -33,94 +35,96 @@ export function HistoryTab({ me }: { me: Staff }) {
   const dayRows = useMemo(() => cityRows.filter((r) => dayKey(r.created_at) === day), [cityRows, day]);
 
   async function remove(a: Attempt) {
-    const res = await supabase.from("attempts").delete().eq("id", a.id);
     setToDelete(null);
+    const res = await supabase.from("attempts").delete().eq("id", a.id);
     if (!res.error) {
       setRows((prev) => prev?.filter((r) => r.id !== a.id) ?? null);
       setStudent(null);
     }
   }
 
-  const back = student ? () => setStudent(null) : day ? () => setDay(null) : city ? () => setCity(null) : null;
-  const subtitle = student
-    ? `Examen de ${student.name}`
-    : day
-      ? `Alumnos evaluados el ${day} en ${city}`
-      : city
-        ? `Días de examen en ${city}`
-        : "Elige una ciudad para ver sus exámenes anteriores.";
+  const crumbs = [
+    { label: "Historial", onClick: () => (setCity(null), setDay(null), setStudent(null)) },
+    city && { label: city, onClick: () => (setDay(null), setStudent(null)) },
+    day && { label: day, onClick: () => setStudent(null) },
+    student && { label: student.name, onClick: () => {} },
+  ].filter(Boolean) as { label: string; onClick: () => void }[];
+
+  const breadcrumb =
+    crumbs.length > 1 ? (
+      <nav aria-label="Ruta" className="flex flex-wrap items-center gap-1 text-sm">
+        {crumbs.map((c, i) => (
+          <span key={i} className="inline-flex items-center gap-1">
+            {i > 0 && <ChevronRight size={14} className="text-muted" />}
+            {i < crumbs.length - 1 ? (
+              <button className="cursor-pointer font-medium text-navy hover:underline" onClick={c.onClick}>
+                {c.label}
+              </button>
+            ) : (
+              <span className="text-muted">{c.label}</span>
+            )}
+          </span>
+        ))}
+      </nav>
+    ) : undefined;
+
+  const scope = day ? dayRows : city ? cityRows : (rows ?? []);
+  const title = student ? student.name : day ? `${city}, ${day}` : city ?? "Historial";
 
   return (
-    <Screen>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="section-title">Historial por ciudades</h2>
-          <p className="text-sm text-muted">{subtitle}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {back && (
-            <button className="btn btn-outline btn-sm" onClick={back}>
-              <ArrowLeft size={14} /> Volver
+    <Page
+      title={title}
+      breadcrumb={breadcrumb}
+      description={student ? undefined : day ? "Alumnos evaluados ese día. Abre uno para ver qué preguntas falló." : city ? "Días de examen en esta ciudad." : "Todos los exámenes entregados, agrupados por ciudad."}
+      actions={
+        !student && (
+          <>
+            <button className="btn btn-ghost btn-sm" onClick={reload}>
+              <RefreshCw size={15} /> Actualizar
             </button>
-          )}
-          {!student && (
             <button
-              className="btn btn-outline btn-sm"
-              disabled={!rows?.length}
-              onClick={() =>
-                downloadCsv(day ? dayRows : city ? cityRows : (rows ?? []), `resultados_${(city ?? "todas").toLowerCase()}${day ? "_" + day.replace(/\//g, "-") : ""}.csv`)
-              }
+              className="btn btn-secondary btn-sm"
+              disabled={!scope.length}
+              onClick={() => downloadCsv(scope, `resultados_${(city ?? "todas").toLowerCase()}${day ? "_" + day.replace(/\//g, "-") : ""}.csv`)}
             >
-              <Download size={14} /> Exportar CSV
+              <Download size={15} /> Exportar CSV
             </button>
-          )}
-          <button className="btn btn-outline btn-sm" onClick={reload} aria-label="Recargar">
-            <RefreshCw size={14} />
-          </button>
-        </div>
-      </div>
-
-      {error && <p className="alert alert-error">{error}</p>}
+          </>
+        )
+      }
+    >
+      {error && <p className="note note-error mb-5">{error}</p>}
       {!rows ? (
-        <div className="flex justify-center py-16 text-muted">
-          <LoaderCircle className="animate-spin" />
-        </div>
+        <Loading />
       ) : student ? (
         <StudentDetail a={student} canDelete={me.role === "admin"} onDelete={() => setToDelete(student)} />
       ) : day ? (
-        <div className="overflow-x-auto rounded-2xl border border-line">
-          <table className="data-table">
+        <div className="sheet overflow-x-auto">
+          <table className="table">
             <thead>
               <tr>
                 <th>Alumno</th>
                 <th>Hora</th>
-                <th>Nota</th>
                 <th>Estado</th>
-                <th className="text-right">Detalle</th>
+                <th className="num">Salidas</th>
+                <th className="num">Nota</th>
+                <th>Resultado</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {dayRows.map((r) => (
-                <tr key={r.id}>
-                  <td className="font-semibold text-ink">
-                    {r.name}
-                    {r.exits > 0 && <div className="text-[11px] font-medium text-amber">Salió {r.exits}×</div>}
-                  </td>
-                  <td className="text-muted tabular-nums">{timeOf(r.created_at)}</td>
-                  <td className="font-bold tabular-nums">{r.status === "left" ? "—" : `${r.score}/${r.total} (${r.pct}%)`}</td>
+                <tr key={r.id} className="row-link" onClick={() => setStudent(r)}>
+                  <td className="font-medium text-ink">{r.name}</td>
+                  <td className="tnum text-muted">{timeOf(r.created_at)}</td>
                   <td>
-                    {r.status === "left" ? (
-                      <span className="badge badge-amber">Abandonó</span>
-                    ) : r.pass ? (
-                      <span className="badge badge-green">Aprobado</span>
-                    ) : (
-                      <span className="badge badge-red">Suspenso</span>
-                    )}
+                    <StatusText a={r} />
                   </td>
-                  <td className="text-right">
-                    <button className="btn btn-primary btn-sm" onClick={() => setStudent(r)}>
-                      Ver fallos
-                    </button>
+                  <td className={`num ${r.exits ? "font-semibold text-amber" : "text-muted"}`}>{r.exits}</td>
+                  <td className="num">{r.status === "left" ? "—" : `${r.score}/${r.total}`}</td>
+                  <td>{r.status === "left" ? <span className="text-muted">—</span> : <span className={`font-semibold ${r.pass ? "text-green" : "text-red"}`}>{r.pass ? "Apto" : "No apto"}</span>}</td>
+                  <td className="text-right text-muted">
+                    <ChevronRight size={16} />
                   </td>
                 </tr>
               ))}
@@ -128,114 +132,157 @@ export function HistoryTab({ me }: { me: Staff }) {
           </table>
         </div>
       ) : city ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          {byDay.map(([d, list]) => (
-            <button key={d} className="panel cursor-pointer text-left transition hover:border-red/40" onClick={() => setDay(d)}>
-              <div className="flex items-center justify-between">
-                <span className="font-display text-lg font-bold text-ink tabular-nums">{d}</span>
-                <span className="badge badge-red">{list.length} alumnos</span>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl border border-line bg-paper p-3 text-center">
-                <Stat label="Aprobados" value={list.filter((r) => r.pass).length} tone="text-green" />
-                <Stat label="Suspensos" value={list.filter((r) => !r.pass && r.status !== "left").length} tone="text-red" />
-                <Stat label="Abandonos" value={list.filter((r) => r.status === "left").length} tone="text-amber" />
-              </div>
-            </button>
-          ))}
+        <div className="sheet overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th className="num">Alumnos</th>
+                <th className="num">Aptos</th>
+                <th className="num">No aptos</th>
+                <th className="num">Abandonos</th>
+                <th className="num">% aptos</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {byDay.map(([d, list]) => {
+                const g = graded(list);
+                const ok = g.filter((r) => r.pass).length;
+                return (
+                  <tr key={d} className="row-link" onClick={() => setDay(d)}>
+                    <td className="tnum font-medium text-ink">{d}</td>
+                    <td className="num">{list.length}</td>
+                    <td className="num text-green">{ok}</td>
+                    <td className="num text-red">{g.length - ok}</td>
+                    <td className="num text-amber">{list.length - g.length}</td>
+                    <td className="num font-semibold">{pct(ok, g.length)} %</td>
+                    <td className="text-right text-muted">
+                      <ChevronRight size={16} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       ) : byCity.length === 0 ? (
-        <p className="panel py-12 text-center text-sm text-muted">Todavía no hay exámenes entregados.</p>
+        <Empty>Todavía no hay exámenes entregados. Aparecerán aquí en cuanto termine el primero.</Empty>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {byCity.map(([c, list]) => (
-            <button key={c} className="panel group cursor-pointer text-left transition hover:border-red/40" onClick={() => setCity(c)}>
-              <div className="font-display text-lg font-bold text-ink group-hover:text-red">{c}</div>
-              <p className="mt-1 text-xs text-muted">
-                {list.length} alumnos evaluados · {new Set(list.map((r) => dayKey(r.created_at))).size} días de examen
-              </p>
-              <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-red">
-                Ver exámenes <ChevronRight size={14} />
-              </span>
-            </button>
-          ))}
+        <div className="sheet overflow-x-auto">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Ciudad</th>
+                <th className="num">Días de examen</th>
+                <th className="num">Alumnos</th>
+                <th className="num">% aptos</th>
+                <th>Último examen</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {byCity.map(([c, list]) => {
+                const g = graded(list);
+                return (
+                  <tr key={c} className="row-link" onClick={() => setCity(c)}>
+                    <td className="font-medium text-ink">{c}</td>
+                    <td className="num">{new Set(list.map((r) => dayKey(r.created_at))).size}</td>
+                    <td className="num">{list.length}</td>
+                    <td className="num font-semibold">{pct(g.filter((r) => r.pass).length, g.length)} %</td>
+                    <td className="tnum text-muted">{dayKey(list[0].created_at)}</td>
+                    <td className="text-right text-muted">
+                      <ChevronRight size={16} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
-      <Dialog
-        open={!!toDelete}
-        title="¿Borrar este resultado?"
-        confirmLabel="Borrar resultado"
-        onCancel={() => setToDelete(null)}
-        onConfirm={() => toDelete && remove(toDelete)}
-      >
+      <Dialog open={!!toDelete} title="¿Borrar este resultado?" confirmLabel="Borrar" onCancel={() => setToDelete(null)} onConfirm={() => toDelete && remove(toDelete)}>
         Se eliminará el examen de {toDelete?.name}. No se puede deshacer.
       </Dialog>
-    </Screen>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div>
-      <div className={`text-[10px] font-bold tracking-wide uppercase ${tone}`}>{label}</div>
-      <div className="font-display text-lg font-bold text-ink tabular-nums">{value}</div>
-    </div>
+    </Page>
   );
 }
 
 function StudentDetail({ a, canDelete, onDelete }: { a: Attempt; canDelete: boolean; onDelete: () => void }) {
-  const failed = (a.results ?? []).filter((r) => !r.ok);
-  const unanswered = (a.total ?? 0) - (a.results?.length ?? 0);
+  const [onlyFailed, setOnlyFailed] = useState(true);
+  const items = a.results ?? [];
+  const failed = items.filter((r) => !r.ok);
+  const unanswered = (a.total ?? 0) - items.length;
+
   return (
     <div className="space-y-5">
-      <div className="panel flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="font-display text-xl font-bold text-ink">{a.name}</h3>
-            <span className="badge badge-muted">{a.city}</span>
-            <StatusBadge a={a} />
-          </div>
-          <p className="mt-1 text-xs text-muted">
-            {new Date(a.created_at).toLocaleDateString("es-ES")} a las {timeOf(a.created_at)}
-            {a.email && ` · ${a.email}`}
-            {a.exits > 0 && <span className="font-semibold text-amber"> · Salió de la pantalla {a.exits} {a.exits === 1 ? "vez" : "veces"}</span>}
-          </p>
-          {a.rating && (
-            <div className="mt-3 max-w-xl rounded-xl border border-amber/25 bg-amber-soft p-3">
-              <StarsView value={a.rating} />
-              {a.comment && <p className="mt-1 text-sm text-ink2 italic">«{a.comment}»</p>}
-            </div>
+      <div className="sheet grid overflow-hidden sm:grid-cols-4 sm:divide-x sm:divide-line">
+        <Cell label="Nota">
+          <span className="display tnum text-4xl text-ink">
+            {a.status === "left" ? "—" : a.score}
+            {a.status !== "left" && <span className="text-2xl text-muted">/{a.total}</span>}
+          </span>
+        </Cell>
+        <Cell label="Resultado">
+          {a.status === "left" ? (
+            <span className="display text-3xl text-amber">Abandonó</span>
+          ) : (
+            <span className={`display text-3xl ${a.pass ? "text-green" : "text-red"}`}>{a.pass ? "Apto" : "No apto"}</span>
           )}
-        </div>
-        <div className="shrink-0 md:text-right">
-          <div className="text-[11px] font-bold tracking-wide text-muted uppercase">Puntuación</div>
-          <div className={`font-display text-4xl font-bold tabular-nums ${a.pass ? "text-green" : "text-red"}`}>
-            {a.score}/{a.total}
-          </div>
-          <div className="text-xs font-semibold text-muted">{a.pct}%</div>
-        </div>
+          <span className="tnum block text-sm text-muted">{a.pct} % de aciertos</span>
+        </Cell>
+        <Cell label="Realizado">
+          <span className="tnum block text-[15px] font-medium text-ink">
+            {dayKey(a.created_at)}, {timeOf(a.created_at)}
+          </span>
+          <span className="block text-sm text-muted">{a.city}</span>
+        </Cell>
+        <Cell label="Salidas de pantalla">
+          <span className={`display tnum text-3xl ${a.exits ? "text-amber" : "text-ink"}`}>{a.exits}</span>
+          {unanswered > 0 && <span className="block text-sm text-muted">{unanswered} sin responder</span>}
+        </Cell>
       </div>
 
-      <h4 className="flex items-center gap-2 text-sm font-bold tracking-wide text-ink uppercase">
-        <span className="h-2.5 w-2.5 rounded-full bg-red" /> Preguntas falladas ({failed.length})
-        {unanswered > 0 && <span className="badge badge-amber normal-case">{unanswered} sin responder</span>}
-      </h4>
-      {a.status === "left" && (
-        <p className="alert alert-warn">El alumno abandonó el examen antes de terminarlo. Se muestran las respuestas que llegó a dar.</p>
-      )}
-      {failed.length === 0 ? (
-        <p className="alert alert-ok">
-          {a.status === "left" || unanswered > 0 ? "No falló ninguna de las preguntas que respondió." : `¡Examen perfecto! Aprobó con el ${a.pct}%.`}
-        </p>
-      ) : (
-        <Breakdown items={failed} onlyFailed />
+      {a.rating && (
+        <div className="sheet p-5">
+          <p className="eyebrow mb-1.5">Valoración del curso</p>
+          <StarsView value={a.rating} />
+          {a.comment && <p className="mt-2 text-[15px] text-ink2">«{a.comment}»</p>}
+        </div>
       )}
 
+      <div className="sheet p-5 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="display text-2xl text-ink">{onlyFailed ? `Preguntas falladas (${failed.length})` : `Todas las respuestas (${items.length})`}</h2>
+          {items.length > 0 && (
+            <button className="btn btn-ghost btn-sm" onClick={() => setOnlyFailed((v) => !v)}>
+              {onlyFailed ? "Ver todas" : "Ver solo fallos"}
+            </button>
+          )}
+        </div>
+        {a.status === "left" && <p className="note note-warn mb-5">Abandonó el examen antes de terminar. Se muestran las respuestas que llegó a dar.</p>}
+        {onlyFailed && failed.length === 0 ? (
+          <p className="text-[15px] text-muted">{items.length ? "No falló ninguna de las preguntas que respondió." : "No llegó a responder ninguna pregunta."}</p>
+        ) : (
+          <Breakdown items={onlyFailed ? failed : items} numbered={!onlyFailed} />
+        )}
+      </div>
+
       {canDelete && (
-        <button className="btn btn-outline btn-sm text-red" onClick={onDelete}>
-          <Trash2 size={14} /> Borrar este resultado
+        <button className="btn btn-danger-ghost btn-sm" onClick={onDelete}>
+          <Trash2 size={15} /> Borrar este resultado
         </button>
       )}
+    </div>
+  );
+}
+
+function Cell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="border-b border-line p-5 last:border-b-0 sm:border-b-0">
+      <p className="eyebrow mb-1">{label}</p>
+      {children}
     </div>
   );
 }

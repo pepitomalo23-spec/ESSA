@@ -1,37 +1,37 @@
+import { Check, X } from "lucide-react";
 import type { ResultItem } from "../lib/api";
 
-// Corrección de cada pregunta: lo que marcó el alumno, la correcta y la explicación.
-export function Breakdown({ items, onlyFailed = false }: { items: ResultItem[]; onlyFailed?: boolean }) {
-  const list = onlyFailed ? items.filter((i) => !i.ok) : items;
+// Corrección pregunta a pregunta, en formato de lista numerada (como una hoja de corrección).
+export function Breakdown({ items, numbered = true }: { items: ResultItem[]; numbered?: boolean }) {
   return (
-    <ol className="space-y-3">
-      {list.map((item, idx) => (
-        <li key={item.id} className="rounded-xl border border-line bg-bg p-4">
-          <p className="text-sm leading-snug font-semibold text-ink">
-            <span className="mr-1.5 font-display text-muted">{onlyFailed ? "✕" : idx + 1}.</span>
-            {item.question}
-          </p>
-          <div className="mt-3 space-y-1.5">
-            {item.options.map((opt, i) => {
-              const isCorrect = i === item.correct;
-              const isSelected = i === item.selected;
-              if (!isCorrect && !isSelected) return null;
-              return (
-                <div
-                  key={i}
-                  className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${
-                    isCorrect ? "border-green/30 bg-green-soft text-green" : "border-red/30 bg-red-soft text-red"
-                  }`}
-                >
-                  <span className="font-medium">{opt}</span>
-                  <span className="text-[10px] font-bold tracking-wide uppercase">
-                    {isCorrect && isSelected ? "Tu respuesta · correcta" : isCorrect ? "Respuesta correcta" : "Tu respuesta"}
-                  </span>
+    <ol className="divide-y divide-line">
+      {items.map((item, idx) => (
+        <li key={item.id} className="grid grid-cols-[28px_1fr] gap-x-3 py-4 first:pt-0 last:pb-0">
+          <span
+            className={`mt-0.5 grid h-6 w-6 place-items-center rounded ${item.ok ? "bg-green-soft text-green" : "bg-red-soft text-red"}`}
+            aria-label={item.ok ? "Correcta" : "Incorrecta"}
+          >
+            {item.ok ? <Check size={15} strokeWidth={2.5} /> : <X size={15} strokeWidth={2.5} />}
+          </span>
+          <div>
+            <p className="font-semibold text-ink">
+              {numbered && <span className="tnum mr-1.5 text-muted">{idx + 1}.</span>}
+              {item.question}
+            </p>
+            <dl className="mt-1.5 space-y-0.5 text-[15px]">
+              <div className="flex gap-2">
+                <dt className="shrink-0 text-muted">Respuesta dada:</dt>
+                <dd className={item.ok ? "font-medium text-green" : "font-medium text-red"}>{item.options[item.selected]}</dd>
+              </div>
+              {!item.ok && (
+                <div className="flex gap-2">
+                  <dt className="shrink-0 text-muted">Correcta:</dt>
+                  <dd className="font-medium text-ink">{item.options[item.correct]}</dd>
                 </div>
-              );
-            })}
+              )}
+            </dl>
+            {item.explanation && <p className="mt-2 text-sm leading-relaxed text-muted">{item.explanation}</p>}
           </div>
-          {item.explanation && <p className="mt-2.5 text-xs leading-relaxed text-muted italic">{item.explanation}</p>}
         </li>
       ))}
     </ol>

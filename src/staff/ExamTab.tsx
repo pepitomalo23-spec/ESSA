@@ -1,24 +1,24 @@
-import { LoaderCircle, Play, Plus, Power, Users } from "lucide-react";
+import { LoaderCircle, Play, Plus, Square } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "../components/Dialog";
-import { Screen } from "../components/Screen";
 import { api, errorMessage, type Attempt, type ExamSession, type Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
 import { formatClock, syncClock, useCountdown } from "../lib/time";
+import { Loading, Page } from "./Page";
 import { useLive } from "./useLive";
 
-export function StatusBadge({ a }: { a: Pick<Attempt, "status" | "score" | "total"> }) {
+export function StatusText({ a }: { a: Pick<Attempt, "status" | "score" | "total"> }) {
   switch (a.status) {
     case "waiting":
-      return <span className="badge badge-amber">Esperando en sala</span>;
+      return <span className="status">En sala</span>;
     case "in_progress":
-      return <span className="badge badge-navy">En examen</span>;
+      return <span className="status status-navy">Respondiendo</span>;
     case "done":
-      return <span className="badge badge-green">Terminó ({a.score}/{a.total})</span>;
+      return <span className="status status-green">Entregado</span>;
     case "timed_out":
-      return <span className="badge badge-amber">Sin tiempo ({a.score}/{a.total})</span>;
+      return <span className="status status-amber">Sin tiempo</span>;
     case "left":
-      return <span className="badge badge-red">Abandonó</span>;
+      return <span className="status status-red">Abandonó</span>;
   }
 }
 
@@ -34,12 +34,7 @@ export function ExamTab({ me }: { me: Staff }) {
   const left = useCountdown(session?.status === "running" ? session.ends_at : null);
 
   const loadSession = useCallback(async () => {
-    const res = await supabase
-      .from("exam_sessions")
-      .select("*")
-      .eq("instructor_id", me.user_id)
-      .neq("status", "closed")
-      .maybeSingle();
+    const res = await supabase.from("exam_sessions").select("*").eq("instructor_id", me.user_id).neq("status", "closed").maybeSingle();
     setSession((res.data as ExamSession | null) ?? null);
   }, [me.user_id]);
 
@@ -62,7 +57,6 @@ export function ExamTab({ me }: { me: Staff }) {
       .eq("id", 1)
       .maybeSingle()
       .then((r) => r.data && setMinutes(r.data.exam_minutes));
-    // Sincroniza el reloj con el servidor para que la cuenta atrás coincida con la de los alumnos.
     api
       .publicInfo()
       .then((i) => syncClock(i.now))
@@ -88,177 +82,203 @@ export function ExamTab({ me }: { me: Staff }) {
     }
   }
 
-  const waiting = attempts.filter((a) => a.status === "waiting");
+  if (session === undefined) return <Loading />;
 
-  if (session === undefined)
+  const count = (s: Attempt["status"]) => attempts.filter((a) => a.status === s).length;
+
+  // ── Sin examen abierto ──
+  if (!session)
     return (
-      <div className="flex justify-center py-16 text-muted">
-        <LoaderCircle className="animate-spin" />
-      </div>
-    );
-
-  return (
-    <Screen>
-      {error && <p className="alert alert-error">{error}</p>}
-
-      {!session ? (
-        <div className="panel mx-auto max-w-xl text-center">
-          <h2 className="section-title">Iniciar nueva evaluación</h2>
-          <p className="page-sub mt-1 mb-5">
-            Elige la ciudad o municipio. Se generará un PIN de 6 cifras y los alumnos verán la sala activa al momento.
-          </p>
-          <label className="label text-left" htmlFor="ex-city">
+      <Page title="Examen en sala" description="Abre la sala para una ciudad. Se generará un código de 6 cifras para que los alumnos entren desde su móvil.">
+        {error && <p className="note note-error mb-5">{error}</p>}
+        <div className="sheet max-w-2xl p-6">
+          <p className="field-label" id="city-label">
             Ciudad o municipio
-          </label>
-          <select id="ex-city" className="input" value={city} onChange={(e) => setCity(e.target.value)}>
-            <option value="">Selecciona una ciudad</option>
-            {cities.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          </p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-labelledby="city-label">
             {cities.map((c) => (
               <button
                 key={c}
-                type="button"
+                role="radio"
+                aria-checked={city === c}
                 onClick={() => setCity(c)}
-                className={`cursor-pointer rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  city === c ? "border-red bg-red text-white" : "border-line bg-paper text-ink2 hover:border-red hover:text-red"
+                className={`cursor-pointer rounded-md border px-3 py-2.5 text-left text-[15px] font-medium transition-colors ${
+                  city === c ? "border-navy bg-navy-soft text-navy shadow-[inset_0_0_0_1px_var(--navy)]" : "border-line-strong text-ink hover:bg-sunken"
                 }`}
               >
                 {c}
               </button>
             ))}
           </div>
-          <button className="btn btn-cta mt-5 w-full" disabled={!city || busy} onClick={() => run(() => api.openSession(city))}>
-            {busy && <LoaderCircle size={17} className="animate-spin" />} ABRIR EXAMEN Y GENERAR PIN
-          </button>
+          <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-5">
+            <p className="text-sm text-muted">{city ? `Se abrirá la sala de ${city}.` : "Elige una ciudad para continuar."}</p>
+            <button className="btn btn-accent" disabled={!city || busy} onClick={() => run(() => api.openSession(city))}>
+              {busy && <LoaderCircle size={16} className="animate-spin" />} Abrir sala
+            </button>
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-          <div className="space-y-5">
-            <div className="panel text-center">
-              <div className="flex items-center justify-center gap-2 text-[11px] font-bold tracking-widest text-muted uppercase">
-                Código de acceso · {session.city}
-              </div>
-              <div className="my-2 font-display text-5xl font-bold tracking-[0.2em] text-red tabular-nums sm:text-6xl">{session.pin}</div>
-              <p className="text-xs text-muted">Dáselo a los alumnos para que entren en la sala de espera.</p>
-            </div>
+      </Page>
+    );
 
-            {session.status === "waiting" ? (
-              <div className="panel space-y-4">
-                <div className="flex items-center gap-2">
-                  <span className="live-dot bg-amber" />
-                  <h3 className="text-xs font-bold tracking-wide text-ink uppercase">Sala de espera abierta</h3>
-                  <span className="badge badge-amber ml-auto">
-                    <Users size={12} /> {waiting.length}
-                  </span>
-                </div>
-                <div>
-                  <label className="label" htmlFor="ex-min">
-                    Duración del examen (minutos)
-                  </label>
-                  <input
-                    id="ex-min"
-                    className="input"
-                    type="number"
-                    min={1}
-                    max={180}
-                    value={minutes}
-                    onChange={(e) => setMinutes(Math.max(1, Math.min(180, Number(e.target.value) || 1)))}
-                  />
-                </div>
-                <button
-                  className="btn btn-success w-full font-extrabold"
-                  disabled={busy}
-                  onClick={() => run(() => api.startSession(session.id, minutes))}
-                >
-                  <Play size={16} /> INICIAR EXAMEN PARA TODOS
-                </button>
-                <button className="btn btn-outline btn-sm w-full" disabled={busy} onClick={() => setConfirmClose(true)}>
-                  Cancelar sesión
-                </button>
-              </div>
+  const running = session.status === "running";
+  const over = running && left === 0;
+
+  return (
+    <Page
+      title={`Examen en sala · ${session.city}`}
+      description={
+        running
+          ? "El examen está en marcha. La tabla se actualiza sola."
+          : "La sala está abierta. Comparte el código con los alumnos y pulsa «Iniciar examen» cuando estén todos."
+      }
+    >
+      {error && <p className="note note-error mb-5">{error}</p>}
+
+      {/* Franja de control */}
+      <div className="sheet grid overflow-hidden sm:grid-cols-[auto_1fr_auto] sm:divide-x sm:divide-line">
+        <div className="border-b border-line p-5 sm:border-b-0 sm:px-7">
+          <p className="eyebrow">Código de acceso</p>
+          <p className="display tnum mt-1 text-6xl tracking-[0.06em] text-ink">
+            {session.pin.slice(0, 3)}
+            <span className="text-line-strong"> </span>
+            {session.pin.slice(3)}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 divide-x divide-line border-b border-line sm:border-b-0">
+          <div className="p-5">
+            <p className="eyebrow">Estado</p>
+            <p className={`display mt-1 text-3xl ${over ? "text-red" : running ? "text-green" : "text-ink"}`}>
+              {over ? "Tiempo agotado" : running ? "En curso" : "Sala de espera"}
+            </p>
+            <p className="tnum mt-0.5 text-sm text-muted">
+              {attempts.length} {attempts.length === 1 ? "alumno" : "alumnos"}
+            </p>
+          </div>
+          <div className="p-5">
+            <p className="eyebrow">{running ? "Tiempo restante" : "Duración"}</p>
+            {running ? (
+              <p className={`display tnum mt-1 text-4xl ${left <= 60 ? "text-red" : "text-ink"}`}>{formatClock(left)}</p>
             ) : (
-              <div className="panel space-y-4 text-center">
-                <div className="flex items-center justify-center gap-2 text-xs font-bold tracking-wide text-green uppercase">
-                  <span className="live-dot bg-green" /> Examen en curso
-                </div>
-                <div>
-                  <div className="text-[11px] font-bold tracking-wider text-muted uppercase">Tiempo restante</div>
-                  <div className={`font-display text-5xl font-bold tabular-nums ${left === 0 ? "text-red" : "text-ink"}`}>
-                    {formatClock(left)}
-                  </div>
-                  <p className={`mt-1 text-xs font-semibold ${left === 0 ? "text-red" : "text-muted"}`}>
-                    {left === 0 ? "El tiempo ha terminado. Cierra la sesión para guardar a todos." : "Los alumnos ven la misma cuenta atrás."}
-                  </p>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button className="btn btn-outline" disabled={busy} onClick={() => run(() => api.extendSession(session.id, 5))}>
-                    <Plus size={15} /> 5 minutos
-                  </button>
-                  <button className="btn btn-danger" disabled={busy} onClick={() => setConfirmClose(true)}>
-                    <Power size={15} /> Terminar y vaciar sala
-                  </button>
-                </div>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input
+                  id="ex-min"
+                  aria-label="Duración en minutos"
+                  className="input tnum w-20 min-h-10 text-center text-lg font-semibold"
+                  type="number"
+                  min={1}
+                  max={180}
+                  value={minutes}
+                  onChange={(e) => setMinutes(Math.max(1, Math.min(180, Number(e.target.value) || 1)))}
+                />
+                <span className="text-[15px] text-ink2">min</span>
               </div>
             )}
           </div>
-
-          <div className="panel">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-xs font-bold tracking-wide text-muted uppercase">Seguimiento de alumnos ({attempts.length})</h3>
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-green">
-                <span className="live-dot bg-green" /> En directo
-              </span>
-            </div>
-            {attempts.length === 0 ? (
-              <p className="py-10 text-center text-sm text-muted italic">Esperando a que se conecten alumnos con el PIN…</p>
-            ) : (
-              <ul className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
-                {attempts.map((a) => (
-                  <li key={a.id} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-paper px-3.5 py-3">
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-semibold text-ink">{a.name}</div>
-                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                        {a.status === "in_progress" && a.question_ids && (
-                          <span>
-                            {Object.keys(a.answers ?? {}).length}/{a.question_ids.length} respondidas
-                          </span>
-                        )}
-                        {a.exits > 0 && (
-                          <span className="font-semibold text-amber">
-                            Salió de la pantalla {a.exits} {a.exits === 1 ? "vez" : "veces"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <StatusBadge a={a} />
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
         </div>
-      )}
+
+        <div className="flex flex-col justify-center gap-2 p-5 sm:min-w-56">
+          {running ? (
+            <>
+              <button className="btn btn-secondary" disabled={busy} onClick={() => run(() => api.extendSession(session.id, 5))}>
+                <Plus size={16} /> Añadir 5 min
+              </button>
+              <button className="btn btn-accent" disabled={busy} onClick={() => setConfirmClose(true)}>
+                <Square size={14} fill="currentColor" /> Terminar examen
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.startSession(session.id, minutes))}>
+                <Play size={15} fill="currentColor" /> Iniciar examen
+              </button>
+              <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmClose(true)}>
+                Cerrar sala
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Alumnos */}
+      <div className="mt-8 mb-3 flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="display text-2xl text-ink">Alumnos</h2>
+        <p className="tnum text-sm text-ink2">
+          {count("waiting")} en sala · {count("in_progress")} respondiendo · {count("done") + count("timed_out")} entregados · {count("left")} abandonos
+        </p>
+      </div>
+      <div className="sheet overflow-x-auto">
+        {attempts.length === 0 ? (
+          <p className="px-6 py-12 text-center text-[15px] text-muted">Todavía no ha entrado nadie. Los alumnos aparecerán aquí en cuanto introduzcan el código.</p>
+        ) : (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Alumno</th>
+                <th>Estado</th>
+                <th>Progreso</th>
+                <th className="num">Salidas</th>
+                <th className="num">Nota</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attempts.map((a) => {
+                const total = a.question_ids?.length ?? 0;
+                const answered = Object.keys(a.answers ?? {}).length;
+                return (
+                  <tr key={a.id}>
+                    <td className="font-medium text-ink">{a.name}</td>
+                    <td>
+                      <StatusText a={a} />
+                    </td>
+                    <td className="min-w-40">
+                      {total > 0 ? (
+                        <div className="flex items-center gap-3">
+                          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-line">
+                            <div className="h-full bg-navy" style={{ width: `${(answered / total) * 100}%` }} />
+                          </div>
+                          <span className="tnum text-sm text-muted">
+                            {answered}/{total}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted">—</span>
+                      )}
+                    </td>
+                    <td className={`num ${a.exits > 0 ? "font-semibold text-amber" : "text-muted"}`}>{a.exits}</td>
+                    <td className="num font-semibold">
+                      {a.score != null && a.status !== "left" ? (
+                        <span className={a.pass ? "text-green" : "text-red"}>
+                          {a.score}/{a.total}
+                        </span>
+                      ) : (
+                        <span className="font-normal text-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       <Dialog
         open={confirmClose}
-        title={session?.status === "waiting" ? "¿Cancelar la sesión?" : "¿Terminar el examen?"}
-        confirmLabel={session?.status === "waiting" ? "Cancelar sesión" : "Terminar y vaciar sala"}
+        title={running ? "¿Terminar el examen?" : "¿Cerrar la sala?"}
+        confirmLabel={running ? "Terminar examen" : "Cerrar sala"}
         cancelLabel="Volver"
         busy={busy}
         onCancel={() => setConfirmClose(false)}
         onConfirm={() => {
           setConfirmClose(false);
-          if (session) run(() => api.closeSession(session.id));
+          run(() => api.closeSession(session.id));
         }}
       >
-        {session?.status === "waiting"
-          ? "Los alumnos de la sala de espera volverán al inicio y el PIN dejará de funcionar."
-          : "Los alumnos que sigan respondiendo se entregarán con lo que lleven contestado. El PIN dejará de funcionar."}
+        {running
+          ? "Quien siga respondiendo entregará con lo que lleve contestado. El código dejará de funcionar."
+          : "Los alumnos de la sala volverán al inicio y el código dejará de funcionar."}
       </Dialog>
-    </Screen>
+    </Page>
   );
 }
-
