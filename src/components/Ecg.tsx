@@ -1,38 +1,63 @@
-// Línea de electrocardiograma: el motivo visual de la app de evaluación, ahora animado.
-const PATH =
-  "M0,30 L140,30 L152,30 L160,18 L168,30 L178,30 L186,4 L196,54 L206,30 L216,30 L228,22 L240,30 L400,30 L412,30 L420,18 L428,30 L438,30 L446,4 L456,54 L466,30 L476,30 L488,22 L500,30 L800,30";
+import { useMemo } from "react";
 
-export function Ecg({
-  className = "",
-  color = "var(--red)",
-  track = "var(--line)",
-  animated = true,
-}: {
-  className?: string;
-  color?: string;
-  track?: string;
-  animated?: boolean;
-}) {
+// Línea de electrocardiograma bajo la cabecera, como en la app original.
+// En el examen avanza con cada pregunta; fuera del examen late suavemente.
+export function Ecg({ current, total }: { current?: number; total?: number }) {
+  const W = 680;
+  const H = 40;
+  const beats = total && total > 0 ? total : 3;
+
+  const d = useMemo(() => {
+    const step = (W - 40) / beats;
+    const pts: string[] = [`M0,${H / 2}`, `L20,${H / 2}`];
+    for (let i = 0; i < beats; i++) {
+      const x = 20 + i * step;
+      pts.push(
+        `L${x + step * 0.35},${H / 2}`,
+        `L${x + step * 0.45},${H / 2 - 14}`,
+        `L${x + step * 0.55},${H / 2 + 10}`,
+        `L${x + step * 0.65},${H / 2}`,
+        `L${x + step},${H / 2}`,
+      );
+    }
+    pts.push(`L${W},${H / 2}`);
+    return pts.join(" ");
+  }, [beats]);
+
+  const progress = total ? Math.min(1, (current ?? 0) / total) : null;
+
   return (
-    <svg
-      viewBox="0 0 800 60"
-      preserveAspectRatio="none"
-      className={`block h-10 w-full overflow-visible ${className}`}
-      aria-hidden="true"
-    >
-      <path d={PATH} fill="none" stroke={track} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-      {animated && (
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="mb-5 block h-10 w-full overflow-visible" aria-hidden="true">
+      <path d={d} fill="none" stroke="var(--line)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      {progress === null ? (
         <path
-          d={PATH}
+          d={d}
           fill="none"
-          stroke={color}
+          stroke="var(--red)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+          pathLength={1000}
+          className="ecg-run"
+          style={{ ["--len" as string]: "1000", opacity: 0.55 }}
+        />
+      ) : (
+        <path
+          d={d}
+          fill="none"
+          stroke="var(--red)"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
           vectorEffect="non-scaling-stroke"
-          className="ecg-run"
           pathLength={1000}
-          style={{ ["--len" as string]: "1000", filter: `drop-shadow(0 0 4px ${color})` }}
+          style={{
+            strokeDasharray: 1000,
+            strokeDashoffset: 1000 * (1 - progress),
+            transition: "stroke-dashoffset .5s ease",
+            filter: "drop-shadow(0 0 4px color-mix(in srgb, var(--red) 60%, transparent))",
+          }}
         />
       )}
     </svg>

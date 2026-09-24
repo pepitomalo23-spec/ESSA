@@ -1,58 +1,66 @@
-# ESSA · Web de la escuela
+# ESSA · Evaluación
 
-Web pública de la **Escuela de Salvamento y Socorrismo Acuático**: cursos, sedes, la escuela y formulario de
-preinscripción. Toma el estilo de la app de evaluación de alumnos (marino + rojo, tarjetas con franja
-superior y la línea de electrocardiograma) y lo lleva a una web completa.
+App de exámenes de la **Escuela de Salvamento y Socorrismo Acuático**. Es la evolución de la app de evaluación
+original (AI Studio + Firebase), con el mismo aspecto (marino y rojo, tarjetas con franja y la línea de
+electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 
-## Qué incluye
+## Cómo funciona
 
-- **Páginas**: Inicio, Cursos, ficha de cada curso, Sedes, La escuela, Contacto/Preinscripción, Privacidad y 404.
-- **Preinscripción** guardada en Supabase, con validación, protección anti-bots y alternativa por email si no
-  hay backend configurado.
-- **Modo claro/oscuro** (sigue al sistema y se puede cambiar a mano), diseño adaptado a móvil y animaciones
-  que se desactivan si el usuario pide menos movimiento.
-- **Accesibilidad**: enlace para saltar al contenido, foco visible, etiquetas y errores asociados a cada campo.
-- **Rendimiento y privacidad**: fuentes alojadas en la propia web (sin Google Fonts) y SDK de Supabase
-  cargado solo al enviar el formulario.
+**Alumno** (`/`)
+1. Escribe su nombre, elige ciudad e introduce el PIN de 6 cifras que le da el instructor.
+2. Espera en la sala hasta que el instructor inicia el examen (empieza solo).
+3. Responde con cuenta atrás; la línea de ECG avanza con cada pregunta.
+4. Si sale de la pantalla aparece un aviso; si confirma que sale, el examen queda bloqueado como abandonado.
+5. Ve su nota (APTO / NO APTO) y, si está activado, las correcciones con explicación.
+6. Valora el curso; con nota alta se le invita a dejar reseña en Google.
 
-Stack: React 19 · Vite · TypeScript · Tailwind CSS 4 · Motion · React Router · Supabase.
+**Instructor** (`/personal`)
+- Abre un examen por ciudad → se genera el PIN → ve la sala de espera en directo.
+- Elige la duración e inicia el examen para todos; puede ampliar 5 minutos o terminarlo.
+- Seguimiento en directo: quién espera, quién responde (y cuántas lleva), quién terminó y con qué nota, quién abandonó y
+  cuántas veces salió de la pantalla.
+- Historial por ciudad → día → alumno → preguntas falladas. Exportación a CSV.
+- Estadísticas: aprobados, nota media, valoración media, preguntas que más se fallan y últimas opiniones.
+
+**Administrador** (además de lo anterior)
+- Preguntas (2 a 6 opciones, correcta y explicación), ciudades, cuentas del personal (crear, cambiar contraseña,
+  eliminar), alumnos autorizados y ajustes (nombre de la evaluación, preguntas por examen, nota de aprobado,
+  duración por defecto, orden aleatorio, mostrar correcciones, reseña de Google).
+
+## Mejoras respecto a la versión original
+
+- **Las respuestas correctas ya no viajan al móvil del alumno**: la corrección se hace en el servidor.
+- **Sin contraseñas en el código**: la clave maestra `ESSA-TEST` desaparece; cada persona tiene su cuenta.
+- **Las respuestas se guardan una a una**: si se va la conexión o se acaba el tiempo, no se pierde nada.
+- **Mismo reloj para todos**: la cuenta atrás se sincroniza con la hora del servidor.
+- **Recarga segura**: si el alumno recarga la página, vuelve a su examen donde lo dejó.
+- **Historial fiel**: cada resultado guarda las preguntas tal como eran, aunque luego se editen.
+- **Alumnos autorizados funciona de verdad**: con la lista activa se pide el email y solo entran los de la lista.
+- Modo oscuro, diálogos propios en lugar de ventanas del navegador, y accesibilidad (teclado, lectores de pantalla).
 
 ## Puesta en marcha
 
 ```bash
 npm install
-cp .env.example .env.local   # y rellena las variables
-npm run dev                  # http://localhost:3000
+npm run dev   # http://localhost:3000
 ```
 
-| Variable | Para qué |
-| --- | --- |
-| `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` | Guardar preinscripciones. Sin ellas, el formulario abre el correo. |
-| `VITE_EVALUACION_URL` | Enlace "Acceso alumnos" a la app de evaluación. Si está vacío, no se muestra. |
+Ya apunta al proyecto de Supabase `essa-web` (la clave publicable es pública por diseño). Para usar otro proyecto,
+copia `.env.example` a `.env.local`.
 
-### Supabase
+**Primera vez:** entra en `/personal`. Como aún no hay administrador, aparece el formulario para crear el tuyo. Después
+desaparece y ya puedes dar de alta a los instructores desde la pestaña *Personal*.
 
-Proyecto en uso: `essa-web` (ref `gepwhdcghtrmzteiuizq`, región París). La migración ya está aplicada.
-Las preinscripciones se ven en Supabase → Table Editor → `preinscripciones` (columna `estado` para el seguimiento).
+## Backend (Supabase)
 
+- `supabase/migrations/` — tablas, políticas RLS, funciones del examen y datos iniciales (8 ciudades y las 7
+  preguntas originales).
+- `supabase/functions/staff-admin/` — alta y baja de cuentas del personal (usa la clave privada, solo en el servidor).
 
-Aplica `supabase/migrations/20260924000000_preinscripciones.sql` (SQL Editor o `supabase db push`). Crea la tabla
-`preinscripciones` con RLS: la web solo puede **insertar**; las solicitudes se consultan desde el panel de
-Supabase.
+Los alumnos no tienen cuenta: solo pueden llamar a las funciones del examen con el token de su intento. El personal
+solo lee datos si su cuenta está en la tabla `staff`.
 
-### Despliegue
+## Despliegue
 
-Preparado para Vercel (`vercel.json` incluye las reescrituras de rutas y cabeceras de seguridad). Configura las
-mismas variables de entorno en el proyecto.
-
-## Antes de publicar: contenido a revisar
-
-Todo el contenido editable está en `src/data/`:
-
-- `site.ts` — teléfono, email, WhatsApp, dirección y redes (marcados con `TODO`).
-- `courses.ts` — horas, requisitos y temario de cada curso (orientativos).
-- `sedes.ts` — ciudades y, opcionalmente, instalación de prácticas.
-- `faq.ts` — preguntas frecuentes.
-
-Revisa también los textos de `src/pages/Escuela.tsx` y sustituye la política de privacidad provisional de
-`src/pages/Privacidad.tsx` por el texto legal definitivo.
+Preparado para Vercel (`vercel.json`: rutas de la app y cabeceras de seguridad). Cada push a `main` se publica si el
+repositorio está conectado al proyecto de Vercel.
