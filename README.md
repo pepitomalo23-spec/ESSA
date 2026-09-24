@@ -32,6 +32,10 @@ npm run dev                  # http://localhost:3000
 
 ### Supabase
 
+Proyecto en uso: `essa-web` (ref `gepwhdcghtrmzteiuizq`, región París). La migración ya está aplicada.
+Las preinscripciones se ven en Supabase → Table Editor → `preinscripciones` (columna `estado` para el seguimiento).
+
+
 Aplica `supabase/migrations/20260924000000_preinscripciones.sql` (SQL Editor o `supabase db push`). Crea la tabla
 `preinscripciones` con RLS: la web solo puede **insertar**; las solicitudes se consultan desde el panel de
 Supabase.
