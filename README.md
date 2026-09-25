@@ -51,7 +51,7 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
   la tiene siempre en «Instalar app». Instalada desde el panel, abre directamente `/personal`.
 - **Vista previa al compartir** (WhatsApp, Telegram…): el enlace de alumnos (`/`, también el del QR) muestra la imagen
   del acceso al examen, y el de instructores (`/personal`) la del panel del personal. Las imágenes están en
-  `public/og-*.jpg`. En Vercel la dirección completa de la imagen se toma sola del dominio de producción; fuera de
+  `public/og-alumnos.jpg` y `public/og-instructores.jpg`. En Vercel la dirección completa de la imagen se toma sola del dominio de producción; fuera de
   Vercel, define `VITE_SITE_URL` (p. ej. `https://examen.essa.es`) al compilar.
 
 ## Puesta en marcha
