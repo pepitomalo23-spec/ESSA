@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 import { AnimatePresence } from "motion/react";
-import { BarChart3, ClipboardList, History, KeyRound, ListChecks, LoaderCircle, LogOut, MapPin, Menu, Settings, UserCheck, Users, X } from "lucide-react";
+import { BarChart3, ClipboardList, ExternalLink, History, KeyRound, ListChecks, LoaderCircle, LogOut, MapPin, Menu, Settings, UserCheck, Users, X } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Dialog } from "../components/Dialog";
@@ -9,6 +9,7 @@ import { Screen } from "../components/Screen";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { api, errorMessage, staffAdmin, type Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import { useTitle } from "../lib/useTitle";
 import { AdminTabs, type AdminTab } from "./AdminTabs";
 import { ExamTab } from "./ExamTab";
 import { HistoryTab } from "./HistoryTab";
@@ -34,6 +35,7 @@ export default function StaffApp() {
   const [me, setMe] = useState<Staff | null | undefined>(undefined);
   const [setupNeeded, setSetupNeeded] = useState(false);
 
+  useTitle("Personal");
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
@@ -95,6 +97,9 @@ function Workspace({ me }: { me: Staff }) {
     <nav className="flex flex-col gap-6" aria-label="Secciones">
       <NavGroup label="Exámenes" items={EXAM_NAV} tab={tab} go={go} />
       {isAdmin && <NavGroup label="Administración" items={ADMIN_NAV} tab={tab} go={go} />}
+      <a href="/" target="_blank" rel="noopener" className="flex items-center gap-3 rounded-md px-3 py-2 text-[15px] font-medium text-ink2 hover:bg-sunken hover:text-ink">
+        <ExternalLink size={18} strokeWidth={1.75} /> Página de alumnos
+      </a>
     </nav>
   );
 

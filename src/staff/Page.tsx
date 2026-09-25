@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { LoaderCircle } from "lucide-react";
 import { Screen } from "../components/Screen";
+import { useTitle } from "../lib/useTitle";
 
 // Cabecera común de cada sección del panel: título, explicación breve y acciones a la derecha.
 export function Page({
@@ -16,6 +17,7 @@ export function Page({
   breadcrumb?: ReactNode;
   children: ReactNode;
 }) {
+  useTitle(title);
   return (
     <Screen>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">

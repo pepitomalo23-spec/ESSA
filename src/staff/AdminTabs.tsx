@@ -1,4 +1,4 @@
-import { ChevronDown, KeyRound, LoaderCircle, Plus, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, KeyRound, LoaderCircle, Plus, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Dialog } from "../components/Dialog";
 import { check, errorMessage, staffAdmin, type AllowedStudent, type Question, type Settings, type Staff } from "../lib/api";
@@ -45,6 +45,15 @@ function QuestionsTab() {
   }, [load]);
 
   const update = (i: number, patch: Partial<Draft>) => setDrafts((d) => d.map((q, j) => (j === i ? { ...q, ...patch } : q)));
+
+  const move = (i: number, dir: -1 | 1) =>
+    setDrafts((d) => {
+      const j = i + dir;
+      if (j < 0 || j >= d.length) return d;
+      const next = [...d];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
 
   function add() {
     const id = crypto.randomUUID();
@@ -167,9 +176,19 @@ function QuestionsTab() {
                     </label>
                     <input id={`e-${q.id}`} className="input" value={q.explanation ?? ""} onChange={(e) => update(i, { explanation: e.target.value })} />
                   </div>
-                  <button className="btn btn-danger-ghost btn-sm" onClick={() => setDrafts((d) => d.filter((_, j) => j !== i))}>
-                    <Trash2 size={15} /> Eliminar pregunta
-                  </button>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
+                    <div className="flex gap-1">
+                      <button className="btn btn-ghost btn-sm" disabled={i === 0} onClick={() => move(i, -1)}>
+                        <ArrowUp size={15} /> Subir
+                      </button>
+                      <button className="btn btn-ghost btn-sm" disabled={i === drafts.length - 1} onClick={() => move(i, 1)}>
+                        <ArrowDown size={15} /> Bajar
+                      </button>
+                    </div>
+                    <button className="btn btn-danger-ghost btn-sm" onClick={() => setDrafts((d) => d.filter((_, j) => j !== i))}>
+                      <Trash2 size={15} /> Eliminar pregunta
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

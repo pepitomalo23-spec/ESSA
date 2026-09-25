@@ -1,9 +1,10 @@
-import { LoaderCircle, Play, Plus, Square } from "lucide-react";
+import { Check, Copy, LoaderCircle, MonitorUp, Play, Plus, Square } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "../components/Dialog";
 import { api, errorMessage, type Attempt, type ExamSession, type Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
-import { formatClock, syncClock, useCountdown } from "../lib/time";
+import { dayKey, formatClock, syncClock, timeOf, useCountdown } from "../lib/time";
+import { joinUrl, Projector } from "./Projector";
 import { Loading, Page } from "./Page";
 import { useLive } from "./useLive";
 
@@ -31,11 +32,25 @@ export function ExamTab({ me }: { me: Staff }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [projecting, setProjecting] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [recent, setRecent] = useState<(ExamSession & { attempts: { count: number }[] })[]>([]);
   const left = useCountdown(session?.status === "running" ? session.ends_at : null);
 
   const loadSession = useCallback(async () => {
     const res = await supabase.from("exam_sessions").select("*").eq("instructor_id", me.user_id).neq("status", "closed").maybeSingle();
     setSession((res.data as ExamSession | null) ?? null);
+  }, [me.user_id]);
+
+  const loadRecent = useCallback(async () => {
+    const res = await supabase
+      .from("exam_sessions")
+      .select("*, attempts(count)")
+      .eq("instructor_id", me.user_id)
+      .eq("status", "closed")
+      .order("created_at", { ascending: false })
+      .limit(6);
+    if (!res.error) setRecent(res.data as (ExamSession & { attempts: { count: number }[] })[]);
   }, [me.user_id]);
 
   const loadAttempts = useCallback(async () => {
@@ -46,6 +61,7 @@ export function ExamTab({ me }: { me: Staff }) {
 
   useEffect(() => {
     loadSession();
+    loadRecent();
     supabase
       .from("cities")
       .select("name")
@@ -61,7 +77,7 @@ export function ExamTab({ me }: { me: Staff }) {
       .publicInfo()
       .then((i) => syncClock(i.now))
       .catch(() => {});
-  }, [loadSession]);
+  }, [loadSession, loadRecent]);
 
   useEffect(() => {
     loadAttempts();
@@ -75,6 +91,7 @@ export function ExamTab({ me }: { me: Staff }) {
     try {
       await action();
       await loadSession();
+      loadRecent();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -117,6 +134,37 @@ export function ExamTab({ me }: { me: Staff }) {
             </button>
           </div>
         </div>
+
+        {recent.length > 0 && (
+          <section className="mt-10 max-w-2xl">
+            <h2 className="display mb-3 text-2xl text-ink">Tus últimos exámenes</h2>
+            <div className="sheet overflow-x-auto">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Ciudad</th>
+                    <th className="num">Duración</th>
+                    <th className="num">Alumnos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map((r) => (
+                    <tr key={r.id}>
+                      <td className="tnum text-ink">
+                        {dayKey(r.created_at)} <span className="text-muted">· {timeOf(r.created_at)}</span>
+                      </td>
+                      <td>{r.city}</td>
+                      <td className="num text-muted">{r.duration_minutes ? `${r.duration_minutes} min` : "No empezó"}</td>
+                      <td className="num font-medium">{r.attempts?.[0]?.count ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-sm text-muted">Los resultados completos están en Historial.</p>
+          </section>
+        )}
       </Page>
     );
 
@@ -143,6 +191,22 @@ export function ExamTab({ me }: { me: Staff }) {
             <span className="text-line-strong"> </span>
             {session.pin.slice(3)}
           </p>
+          <div className="mt-3 flex flex-wrap gap-1">
+            <button className="btn btn-secondary btn-sm" onClick={() => setProjecting(true)}>
+              <MonitorUp size={15} /> Proyectar
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                navigator.clipboard?.writeText(joinUrl(session)).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }, () => {});
+              }}
+            >
+              {copied ? <Check size={15} className="text-green" /> : <Copy size={15} />} {copied ? "Enlace copiado" : "Copiar enlace"}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 divide-x divide-line border-b border-line sm:border-b-0">
@@ -262,6 +326,8 @@ export function ExamTab({ me }: { me: Staff }) {
           </table>
         )}
       </div>
+
+      {projecting && <Projector session={session} waiting={count("waiting")} onClose={() => setProjecting(false)} />}
 
       <Dialog
         open={confirmClose}

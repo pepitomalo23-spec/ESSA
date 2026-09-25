@@ -16,10 +16,12 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 
 **Instructor** (`/personal`)
 - Abre un examen por ciudad → se genera el PIN → ve la sala de espera en directo.
+- **Proyectar**: muestra a pantalla completa la dirección, el código y un QR. Al escanearlo, el alumno entra con la
+  ciudad y el código ya puestos; solo escribe su nombre.
 - Elige la duración e inicia el examen para todos; puede ampliar 5 minutos o terminarlo.
 - Seguimiento en directo: quién espera, quién responde (y cuántas lleva), quién terminó y con qué nota, quién abandonó y
   cuántas veces salió de la pantalla.
-- Historial por ciudad → día → alumno → preguntas falladas. Exportación a CSV.
+- Historial por ciudad → día → alumno → preguntas falladas, con buscador de alumnos. Exportación a CSV.
 - Estadísticas: aprobados, nota media, valoración media, preguntas que más se fallan y últimas opiniones.
 
 **Administrador** (además de lo anterior)
@@ -37,6 +39,7 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 - **Historial fiel**: cada resultado guarda las preguntas tal como eran, aunque luego se editen.
 - **Alumnos autorizados funciona de verdad**: con la lista activa se pide el email y solo entran los de la lista.
 - Modo oscuro, diálogos propios en lugar de ventanas del navegador, y accesibilidad (teclado, lectores de pantalla).
+- Aviso de «sin conexión», icono propio para añadir la app a la pantalla de inicio del móvil y título en cada pestaña.
 
 ## Puesta en marcha
 

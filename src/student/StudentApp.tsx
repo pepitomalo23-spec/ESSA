@@ -5,13 +5,14 @@ import { Link } from "react-router-dom";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
 import { EcgProgress } from "../components/Ecg";
-import { GoogleMark, GoogleReview, launchReview, type Launch } from "../components/GoogleReview";
+import { GoogleReview } from "../components/GoogleReview";
 import { PinInput } from "../components/PinInput";
 import { Screen } from "../components/Screen";
 import { Shell } from "../components/Shell";
 import { StarPicker } from "../components/Stars";
 import { api, errorMessage, type FinishResult, type PublicInfo, type StudentQuestion } from "../lib/api";
 import { formatClock, syncClock, useCountdown } from "../lib/time";
+import { useTitle } from "../lib/useTitle";
 
 type Stage = "intro" | "waiting" | "quiz" | "result" | "locked";
 type Saved = { token: string; name: string; city: string };
@@ -87,6 +88,13 @@ export default function StudentApp() {
 
   const goQuiz = useCallback(() => setStage("quiz"), []);
 
+  // Cada pantalla empieza arriba (tras entregar, el botón quedaba al final de la página).
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [stage]);
+
+  useTitle({ intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado", locked: "Examen bloqueado" }[stage]);
+
   const finished = useCallback((r: FinishResult) => {
     setResult(r);
     setStage(r.status === "left" ? "locked" : "result");
@@ -94,13 +102,13 @@ export default function StudentApp() {
 
   return (
     <Shell
-      context={attempt && stage !== "intro" ? <span className="hidden text-sm text-muted sm:inline">{attempt.name}</span> : null}
-      footer={
-        stage === "intro" && (
-          <Link to="/personal" className="inline-flex items-center gap-1 hover:text-ink">
-            Acceso del personal de ESSA <ArrowRight size={14} />
+      context={attempt && stage !== "intro" ? <span className="hidden max-w-48 truncate text-sm text-muted sm:inline">{attempt.name}</span> : null}
+      footerLink={
+        stage === "intro" ? (
+          <Link to="/personal" className="inline-flex items-center gap-1 font-medium text-ink2 hover:text-ink">
+            Acceso del personal <ArrowRight size={14} />
           </Link>
-        )
+        ) : undefined
       }
     >
       <AnimatePresence mode="wait">
@@ -138,10 +146,21 @@ function PageHead({ eyebrow, title, children }: { eyebrow: string; title: string
 
 // ── 1. Acceso ─────────────────────────────────────────────────────────────
 function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: string; onJoined: (s: Saved, running: boolean) => void }) {
+  // El QR que proyecta el instructor trae la ciudad y el código: el alumno solo escribe su nombre.
+  const [prefill] = useState(() => {
+    const q = new URLSearchParams(window.location.search);
+    const code = (q.get("codigo") ?? "").replace(/\D/g, "").slice(0, 6);
+    if (q.has("codigo") || q.has("ciudad")) window.history.replaceState(null, "", window.location.pathname);
+    return { city: q.get("ciudad") ?? "", pin: code };
+  });
   const [name, setName] = useState("");
-  const [city, setCity] = useState("");
+  const [city, setCity] = useState(prefill.city);
   const [email, setEmail] = useState("");
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState(prefill.pin);
+  const nameRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (prefill.pin) nameRef.current?.focus();
+  }, [prefill.pin]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -173,13 +192,18 @@ function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: st
       </PageHead>
 
       {notice && <p className="note note-warn mb-5">{notice}</p>}
+      {prefill.pin && !notice && (
+        <p className="note note-info mb-5">
+          Código y ciudad ya puestos{prefill.city ? ` (${prefill.city})` : ""}. Solo falta tu nombre.
+        </p>
+      )}
 
       <form className="sheet space-y-5 p-5 sm:p-7" onSubmit={submit} noValidate>
         <div>
           <label className="field-label" htmlFor="st-name">
             Nombre y apellidos
           </label>
-          <input id="st-name" className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+          <input id="st-name" ref={nameRef} className="input" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
         </div>
 
         <div>
@@ -533,16 +557,11 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onlyFailed, setOnlyFailed] = useState(false);
-  const [launch, setLaunch] = useState<Launch | null>(null);
   const timedOut = result.status === "timed_out";
   const items = result.breakdown ?? [];
   const failed = items.filter((i) => !i.ok).length;
 
-  const review = info?.google_review_url && rating >= (info?.review_threshold ?? 4);
-
   async function sendRating() {
-    // Con buena nota, Google se abre en este mismo clic (fuera del gesto el navegador lo bloquearía).
-    if (review) setLaunch(launchReview(info!.google_review_url!, comment));
     setBusy(true);
     setError("");
     try {
@@ -554,6 +573,8 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
       setBusy(false);
     }
   }
+
+  const review = info?.google_review_url && rating >= (info?.review_threshold ?? 4);
 
   return (
     <Screen className="space-y-5">
@@ -580,6 +601,42 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
         </div>
       </div>
 
+      {!sent ? (
+        <div className="sheet p-5 sm:p-7">
+          <h2 className="display text-2xl text-ink">¿Qué te ha parecido el curso?</h2>
+          <p className="mt-1 text-[15px] text-ink2">Tu valoración llega a la escuela y nos ayuda a mejorar cada convocatoria.</p>
+          <div className="mt-5">
+            <StarPicker value={rating} onChange={setRating} />
+          </div>
+          <label className="field-label mt-5" htmlFor="st-comment">
+            Comentario <span className="font-normal text-muted">(opcional)</span>
+          </label>
+          <textarea
+            id="st-comment"
+            className="input"
+            value={comment}
+            maxLength={1000}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Sobre el formador, las prácticas, el material…"
+          />
+          {error && <p className="note note-error mt-4">{error}</p>}
+          <button className="btn btn-primary mt-5" onClick={sendRating} disabled={rating === 0 || busy}>
+            Enviar valoración
+          </button>
+        </div>
+      ) : (
+        <div className="sheet p-5 sm:p-7">
+          {review ? (
+            <GoogleReview url={info!.google_review_url!} comment={comment} rating={rating} />
+          ) : (
+            <>
+              <h2 className="display text-2xl text-ink">Gracias por tu valoración</h2>
+              <p className="mt-1 text-[15px] text-ink2">Tomamos nota de tus comentarios para la próxima convocatoria.</p>
+            </>
+          )}
+        </div>
+      )}
+
       {items.length > 0 && (
         <div className="sheet p-5 sm:p-7">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -603,49 +660,6 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
             )}
           </div>
           <Breakdown items={onlyFailed ? items.filter((i) => !i.ok) : items} numbered={!onlyFailed} />
-        </div>
-      )}
-
-      {!sent ? (
-        <div className="sheet p-5 sm:p-7">
-          <h2 className="display text-2xl text-ink">¿Qué te ha parecido el curso?</h2>
-          <p className="mt-1 text-[15px] text-ink2">Tu valoración llega a la escuela y nos ayuda a mejorar cada convocatoria.</p>
-          <div className="mt-5">
-            <StarPicker value={rating} onChange={setRating} />
-          </div>
-          <label className="field-label mt-5" htmlFor="st-comment">
-            Comentario <span className="font-normal text-muted">(opcional)</span>
-          </label>
-          <textarea
-            id="st-comment"
-            className="input"
-            value={comment}
-            maxLength={1000}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Sobre el formador, las prácticas, el material…"
-          />
-          {error && <p className="note note-error mt-4">{error}</p>}
-          <button className="btn btn-primary mt-5" onClick={sendRating} disabled={rating === 0 || busy}>
-            {review ? (
-              <>
-                <GoogleMark /> Enviar y publicar en Google
-              </>
-            ) : (
-              "Enviar valoración"
-            )}
-          </button>
-          {review && <p className="field-help">Se abrirá Google con tu cuenta para que publiques la reseña de la escuela.</p>}
-        </div>
-      ) : (
-        <div className="sheet p-5 sm:p-7">
-          {review ? (
-            <GoogleReview url={info!.google_review_url!} comment={comment} rating={rating} launch={launch} />
-          ) : (
-            <>
-              <h2 className="display text-2xl text-ink">Gracias por tu valoración</h2>
-              <p className="mt-1 text-[15px] text-ink2">Tomamos nota de tus comentarios para la próxima convocatoria.</p>
-            </>
-          )}
         </div>
       )}
 

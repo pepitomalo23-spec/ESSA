@@ -1,4 +1,4 @@
-import { ChevronRight, Download, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronRight, Download, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
@@ -20,6 +20,18 @@ export function HistoryTab({ me }: { me: Staff }) {
   const [day, setDay] = useState<string | null>(null);
   const [student, setStudent] = useState<Attempt | null>(null);
   const [toDelete, setToDelete] = useState<Attempt | null>(null);
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const found = useMemo(
+    () => (q ? (rows ?? []).filter((r) => r.name.toLowerCase().includes(q) || (r.email ?? "").toLowerCase().includes(q)).slice(0, 50) : []),
+    [rows, q],
+  );
+  const openStudent = (r: Attempt) => {
+    setCity(r.city);
+    setDay(dayKey(r.created_at));
+    setStudent(r);
+    setQuery("");
+  };
 
   const byCity = useMemo(() => {
     const map = new Map<string, Attempt[]>();
@@ -166,9 +178,61 @@ export function HistoryTab({ me }: { me: Staff }) {
             </tbody>
           </table>
         </div>
-      ) : byCity.length === 0 ? (
-        <Empty>Todavía no hay exámenes entregados. Aparecerán aquí en cuanto termine el primero.</Empty>
       ) : (
+        <>
+          <div className="relative mb-5 max-w-md">
+            <Search size={17} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted" />
+            <input
+              className="input pl-9"
+              type="search"
+              placeholder="Buscar alumno por nombre o email"
+              aria-label="Buscar alumno"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          {q ? (
+            found.length === 0 ? (
+              <Empty>Ningún alumno coincide con «{query.trim()}».</Empty>
+            ) : (
+              <div className="sheet overflow-x-auto">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Alumno</th>
+                      <th>Ciudad</th>
+                      <th>Fecha</th>
+                      <th className="num">Nota</th>
+                      <th>Resultado</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {found.map((r) => (
+                      <tr key={r.id} className="row-link" onClick={() => openStudent(r)}>
+                        <td className="font-medium text-ink">{r.name}</td>
+                        <td>{r.city}</td>
+                        <td className="tnum text-muted">{dayKey(r.created_at)}</td>
+                        <td className="num">{r.status === "left" ? "—" : `${r.score}/${r.total}`}</td>
+                        <td>
+                          {r.status === "left" ? (
+                            <span className="text-amber">Abandonó</span>
+                          ) : (
+                            <span className={`font-semibold ${r.pass ? "text-green" : "text-red"}`}>{r.pass ? "Apto" : "No apto"}</span>
+                          )}
+                        </td>
+                        <td className="text-right text-muted">
+                          <ChevronRight size={16} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : byCity.length === 0 ? (
+            <Empty>Todavía no hay exámenes entregados. Aparecerán aquí en cuanto termine el primero.</Empty>
+          ) : (
         <div className="sheet overflow-x-auto">
           <table className="table">
             <thead>
@@ -200,6 +264,8 @@ export function HistoryTab({ me }: { me: Staff }) {
             </tbody>
           </table>
         </div>
+          )}
+        </>
       )}
 
       <Dialog open={!!toDelete} title="¿Borrar este resultado?" confirmLabel="Borrar" onCancel={() => setToDelete(null)} onConfirm={() => toDelete && remove(toDelete)}>
