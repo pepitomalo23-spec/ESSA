@@ -12,6 +12,7 @@ import { Shell } from "../components/Shell";
 import { StarPicker } from "../components/Stars";
 import { api, ApiError, errorMessage, type FinishResult, type PublicInfo, type StudentQuestion } from "../lib/api";
 import { formatClock, syncClock, useCountdown } from "../lib/time";
+import { scrollToTop } from "../lib/scroll";
 import { useTitle } from "../lib/useTitle";
 
 type Stage = "intro" | "waiting" | "quiz" | "result" | "locked";
@@ -90,7 +91,7 @@ export default function StudentApp() {
 
   // Cada pantalla empieza arriba (tras entregar, el botón quedaba al final de la página).
   useEffect(() => {
-    window.scrollTo({ top: 0 });
+    scrollToTop();
   }, [stage]);
 
   useTitle({ intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado", locked: "Examen abandonado" }[stage]);
@@ -102,6 +103,7 @@ export default function StudentApp() {
 
   return (
     <Shell
+      hero={stage === "intro" ? <Welcome info={info} /> : undefined}
       context={attempt && stage !== "intro" ? <span className="hidden max-w-48 truncate text-sm text-muted sm:inline">{attempt.name}</span> : null}
       footerLink={
         stage === "intro" ? (
@@ -186,19 +188,20 @@ function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: st
   }
 
   return (
-    <Screen>
-      <PageHead eyebrow={`Evaluación · ${info?.exam_title ?? "Primeros Auxilios"}`} title="Acceso al examen">
-        Escribe tus datos y el código de 6 cifras que te ha dado tu instructor.
-      </PageHead>
+    <Screen className="relative z-[1] -mt-24 sm:-mt-28">
 
-      {notice && <p className="note note-warn mb-5">{notice}</p>}
-      {prefill.pin && !notice && (
-        <p className="note note-info mb-5">
-          Código y ciudad ya puestos{prefill.city ? ` (${prefill.city})` : ""}. Solo falta tu nombre.
-        </p>
-      )}
+      <form className="sheet space-y-5 p-5 shadow-[0_24px_48px_-28px_rgb(11_27_47/0.45)] sm:p-7" onSubmit={submit} noValidate>
+        <div>
+          <h2 className="display text-[28px] text-ink">Acceso al examen</h2>
+          <p className="mt-1 text-[15px] text-ink2">Escribe tu nombre, elige tu ciudad y el código que te dé tu instructor.</p>
+        </div>
+        {notice && <p className="note note-warn">{notice}</p>}
+        {prefill.pin && !notice && (
+          <p className="note note-info">
+            Código y ciudad ya puestos{prefill.city ? ` (${prefill.city})` : ""}. Solo falta tu nombre.
+          </p>
+        )}
 
-      <form className="sheet space-y-5 p-5 sm:p-7" onSubmit={submit} noValidate>
         <div>
           <label className="field-label" htmlFor="st-name">
             Nombre y apellidos
@@ -252,12 +255,55 @@ function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: st
           </p>
         )}
 
-        <button type="submit" className="btn btn-accent btn-lg w-full" disabled={busy}>
+        <button type="submit" className="btn btn-primary btn-lg w-full" disabled={busy}>
           {busy && <LoaderCircle size={18} className="animate-spin" />}
           Entrar al examen
         </button>
       </form>
+
+      <section className="mt-12" aria-labelledby="como-funciona">
+        <h2 id="como-funciona" className="eyebrow mb-4">
+          Cómo funciona
+        </h2>
+        <ol className="grid gap-6 sm:grid-cols-3 sm:gap-5">
+          {[
+            ["Entra con tu código", "Tu instructor te dará un código de 6 cifras, o un QR para entrar directamente."],
+            ["Espera en la sala", "El examen empieza a la vez para todos, en esta misma pantalla."],
+            ["Responde con calma", "Cada respuesta se guarda al momento. No cambies de aplicación: el examen se pausaría."],
+          ].map(([title, text], i) => (
+            <li key={title} className="border-t-2 border-navy pt-3">
+              <p className="display tnum text-lg text-red">{String(i + 1).padStart(2, "0")}</p>
+              <p className="mt-0.5 font-semibold text-ink">{title}</p>
+              <p className="mt-1 text-[15px] leading-relaxed text-ink2">{text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
     </Screen>
+  );
+}
+
+// Banda de bienvenida del acceso: saludo, fecha y el tono tranquilo que necesita alguien que va a examinarse.
+function Welcome({ info }: { info: PublicInfo | null }) {
+  const today = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+  return (
+    <section className="relative shrink-0 overflow-hidden bg-brand-deep text-white">
+      <svg className="pointer-events-none absolute inset-x-0 bottom-10 h-16 w-full opacity-25" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0,30 L360,30 L372,30 L380,10 L390,52 L400,30 L412,30 L420,22 L428,30 L600,30" fill="none" stroke="#ef5b52" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="relative mx-auto max-w-[640px] px-4 pt-10 pb-32 sm:pt-14 sm:pb-36">
+        <p className="eyebrow text-white/60 first-letter:uppercase">{today}</p>
+        <h1 className="display mt-3 text-[44px] leading-[0.98] sm:text-6xl">
+          Te damos la bienvenida
+          <br />
+          <span className="text-white/70">a tu evaluación.</span>
+        </h1>
+        <p className="mt-4 max-w-[46ch] text-[17px] leading-relaxed text-white/80">
+          Hoy toca demostrar lo aprendido en el curso de <strong className="font-semibold text-white">{info?.exam_title ?? "Primeros Auxilios"}</strong>. Lee cada
+          pregunta con calma: lo has practicado.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -497,24 +543,27 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
         </div>
       ) : (
         <>
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="eyebrow">Pregunta</p>
-              <p className="display tnum text-4xl text-ink">
-                {String(idx + 1).padStart(2, "0")}
-                <span className="text-2xl text-muted"> / {String(questions.length).padStart(2, "0")}</span>
-              </p>
-            </div>
-            {endsAt && (
-              <div className="text-right" aria-live={left <= 30 ? "assertive" : "off"}>
-                <p className="eyebrow">Tiempo</p>
-                <p className={`display tnum text-4xl ${tone}`}>{formatClock(left)}</p>
+          {/* Fijo arriba: número de pregunta, tiempo y progreso */}
+          <div className="sticky top-0 z-10 -mx-4 -mt-8 mb-6 border-b border-line bg-bg/95 px-4 pt-4 pb-2 backdrop-blur sm:-mt-12 sm:pt-6">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="eyebrow">Pregunta</p>
+                <p className="display tnum text-4xl text-ink">
+                  {String(idx + 1).padStart(2, "0")}
+                  <span className="text-2xl text-muted"> / {String(questions.length).padStart(2, "0")}</span>
+                </p>
               </div>
-            )}
-          </div>
+              {endsAt && (
+                <div className="text-right" aria-live={left <= 30 ? "assertive" : "off"}>
+                  <p className="eyebrow">Tiempo</p>
+                  <p className={`display tnum text-4xl ${tone}`}>{formatClock(left)}</p>
+                </div>
+              )}
+            </div>
 
-          <div className="mt-3 mb-6">
-            <EcgProgress current={idx} total={questions.length} />
+            <div className="mt-2">
+              <EcgProgress current={idx} total={questions.length} />
+            </div>
           </div>
 
           {locked ? (
@@ -538,7 +587,7 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
               </div>
             </div>
           ) : (
-          <div className="sheet p-5 sm:p-7">
+          <div className="sheet px-5 pt-5 sm:px-7 sm:pt-7">
             <h1 className="text-[21px] leading-snug font-semibold text-ink sm:text-2xl" id="q-text">
               {q.question}
             </h1>
@@ -574,12 +623,13 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
               </p>
             )}
 
-            <div className="mt-7 flex items-center justify-between gap-4 border-t border-line pt-5">
+            {/* Fijo abajo: el botón para seguir siempre a mano */}
+            <div className="sticky bottom-0 -mx-5 mt-7 flex items-center justify-between gap-4 rounded-b-lg border-t border-line bg-surface px-5 py-4 sm:-mx-7 sm:px-7 sm:py-5">
               <p className="hidden text-sm text-muted sm:block">
                 Teclas <kbd className="tag">A</kbd>–<kbd className="tag">{String.fromCharCode(64 + q.options.length)}</kbd> para elegir,{" "}
                 <kbd className="tag">Intro</kbd> para seguir
               </p>
-              <button className={`btn ${isLast ? "btn-accent" : "btn-primary"} btn-lg w-full sm:w-auto sm:min-w-52`} onClick={next} disabled={selected === null || saving}>
+              <button className={`btn btn-primary btn-lg w-full sm:w-auto sm:min-w-52`} onClick={next} disabled={selected === null || saving}>
                 {saving && <LoaderCircle size={17} className="animate-spin" />}
                 {isLast ? "Entregar examen" : "Siguiente"}
                 {!isLast && !saving && <ArrowRight size={17} />}

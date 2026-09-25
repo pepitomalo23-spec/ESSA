@@ -144,7 +144,7 @@ export function ExamTab({ me }: { me: Staff }) {
           </div>
           <div className="mt-6 flex items-center justify-between gap-4 border-t border-line pt-5">
             <p className="text-sm text-muted">{city ? `Se abrirá la sala de ${city}.` : "Elige una ciudad para continuar."}</p>
-            <button className="btn btn-accent" disabled={!city || busy} onClick={() => run(() => api.openSession(city))}>
+            <button className="btn btn-primary" disabled={!city || busy} onClick={() => run(() => api.openSession(city))}>
               {busy && <LoaderCircle size={16} className="animate-spin" />} Abrir sala
             </button>
           </div>
@@ -262,13 +262,13 @@ export function ExamTab({ me }: { me: Staff }) {
               <button className="btn btn-secondary" disabled={busy} onClick={() => run(() => api.extendSession(session.id, 5))}>
                 <Plus size={16} /> Añadir 5 min
               </button>
-              <button className="btn btn-accent" disabled={busy} onClick={() => setConfirmClose(true)}>
+              <button className="btn btn-danger" disabled={busy} onClick={() => setConfirmClose(true)}>
                 <Square size={14} fill="currentColor" /> Terminar examen
               </button>
             </>
           ) : (
             <>
-              <button className="btn btn-accent" disabled={busy} onClick={() => run(() => api.startSession(session.id, minutes))}>
+              <button className="btn btn-primary" disabled={busy} onClick={() => run(() => api.startSession(session.id, minutes))}>
                 <Play size={15} fill="currentColor" /> Iniciar examen
               </button>
               <button className="btn btn-ghost" disabled={busy} onClick={() => setConfirmClose(true)}>

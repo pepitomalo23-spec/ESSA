@@ -35,7 +35,7 @@ export function Projector({ session, waiting, onClose }: { session: ExamSession;
   const host = window.location.host;
 
   return createPortal(
-    <div className="fixed inset-0 z-[60] flex flex-col bg-[#0f2547] text-white" role="dialog" aria-modal="true" aria-label="Código del examen para proyectar">
+    <div className="fixed inset-0 z-[60] flex flex-col bg-brand-deep text-white" role="dialog" aria-modal="true" aria-label="Código del examen para proyectar">
       <div className="flex items-center justify-between px-[4vw] py-[3vh]">
         <span className="inline-flex rounded bg-white px-3 py-2">
           <Logo className="h-[5vh] min-h-8" />

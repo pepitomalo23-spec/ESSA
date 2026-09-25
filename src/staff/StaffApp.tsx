@@ -9,6 +9,7 @@ import { Screen } from "../components/Screen";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { api, errorMessage, staffAdmin, type Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import { scrollToTop } from "../lib/scroll";
 import { useTitle } from "../lib/useTitle";
 import { AdminTabs, type AdminTab } from "./AdminTabs";
 import { ExamTab } from "./ExamTab";
@@ -61,7 +62,7 @@ export default function StaffApp() {
 
   if (session === undefined || (session && me === undefined))
     return (
-      <div className="grid min-h-dvh place-items-center text-muted">
+      <div className="grid h-full place-items-center text-muted">
         <LoaderCircle className="animate-spin" />
       </div>
     );
@@ -90,7 +91,7 @@ function Workspace({ me }: { me: Staff }) {
   const go = (t: Tab) => {
     setTab(t);
     setMenuOpen(false);
-    window.scrollTo({ top: 0 });
+    scrollToTop();
   };
 
   const nav = (
@@ -104,40 +105,42 @@ function Workspace({ me }: { me: Staff }) {
   );
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[256px_1fr]">
-      {/* Barra lateral (escritorio) */}
-      <aside className="sticky top-0 hidden h-dvh flex-col border-r border-line bg-surface lg:flex">
+    <div className="flex h-full">
+      {/* Barra lateral fija (escritorio) */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-line bg-surface lg:flex">
         <div className="border-b border-line px-5 py-4">
           <Logo className="h-9" />
         </div>
-        <div className="flex-1 overflow-y-auto px-3 py-5">{nav}</div>
+        <div className="scroll-area flex-1 px-3 py-5">{nav}</div>
         <UserBox me={me} />
       </aside>
 
-      {/* Barra superior (móvil) */}
-      <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-surface px-4 lg:hidden">
-        <Logo className="h-8" />
-        <button className="btn btn-ghost btn-sm px-2" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menú">
-          {menuOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
-      </header>
-      {menuOpen && (
-        <div className="fixed inset-x-0 top-14 bottom-0 z-20 flex flex-col bg-surface lg:hidden">
-          <div className="flex-1 overflow-y-auto px-3 py-5">{nav}</div>
-          <UserBox me={me} />
-        </div>
-      )}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior fija (móvil) */}
+        <header className="z-30 flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-4 lg:hidden">
+          <Logo className="h-8" />
+          <button className="btn btn-ghost btn-sm px-2" onClick={() => setMenuOpen((o) => !o)} aria-expanded={menuOpen} aria-label="Menú">
+            {menuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </header>
+        {menuOpen && (
+          <div className="fixed inset-x-0 top-14 bottom-0 z-20 flex flex-col bg-surface lg:hidden">
+            <div className="scroll-area flex-1 px-3 py-5">{nav}</div>
+            <UserBox me={me} />
+          </div>
+        )}
 
-      <main className="min-w-0 px-4 py-6 sm:px-8 sm:py-8">
-        <div className="mx-auto max-w-[1120px]">
+        <main id="scroll-root" className="scroll-area min-h-0 flex-1 px-4 py-6 sm:px-8 sm:py-8">
+          <div className="mx-auto max-w-[1120px] pb-[env(safe-area-inset-bottom)]">
           <AnimatePresence mode="wait">
             {tab === "exam" && <ExamTab key="exam" me={me} />}
             {tab === "history" && <HistoryTab key="history" me={me} />}
             {tab === "stats" && <StatsTab key="stats" />}
             {isAdmin && ADMIN_NAV.some((n) => n.id === tab) && <AdminTabs key={tab} tab={tab as AdminTab} me={me} />}
           </AnimatePresence>
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
@@ -230,8 +233,8 @@ function UserBox({ me }: { me: Staff }) {
 // Pantalla partida: a la izquierda la marca, a la derecha el formulario.
 function AuthScreen({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1fr_minmax(0,560px)]">
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-[#0f2547] p-12 text-white lg:flex">
+    <div className="grid h-full lg:grid-cols-[1fr_minmax(0,560px)]">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-deep p-12 text-white lg:flex">
         <div className="inline-flex w-fit rounded bg-white px-3 py-2">
           <Logo className="h-10" />
         </div>
@@ -248,7 +251,7 @@ function AuthScreen({ children }: { children: ReactNode }) {
           <path d="M0,30 L250,30 L262,30 L270,8 L280,52 L290,30 L600,30" fill="none" stroke="#f2574f" strokeWidth="2" vectorEffect="non-scaling-stroke" />
         </svg>
       </div>
-      <div className="flex flex-col bg-surface">
+      <div id="scroll-root" className="scroll-area flex flex-col bg-surface">
         <div className="flex items-center justify-between px-6 py-5 lg:justify-end">
           <span className="lg:hidden">
             <Logo className="h-9" />

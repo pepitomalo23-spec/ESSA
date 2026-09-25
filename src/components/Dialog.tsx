@@ -59,7 +59,7 @@ export function Dialog({
               <button ref={cancelRef} className="btn btn-secondary" onClick={onCancel} disabled={busy}>
                 {cancelLabel}
               </button>
-              <button className={`btn ${tone === "danger" ? "btn-accent" : "btn-primary"}`} onClick={onConfirm} disabled={busy}>
+              <button className={`btn ${tone === "danger" ? "btn-danger" : "btn-primary"}`} onClick={onConfirm} disabled={busy}>
                 {confirmLabel}
               </button>
             </div>
