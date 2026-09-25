@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
 import { EcgProgress } from "../components/Ecg";
-import { GoogleReview } from "../components/GoogleReview";
+import { GoogleMark, GoogleReview, launchReview, type Launch } from "../components/GoogleReview";
 import { PinInput } from "../components/PinInput";
 import { Screen } from "../components/Screen";
 import { Shell } from "../components/Shell";
@@ -533,11 +533,16 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onlyFailed, setOnlyFailed] = useState(false);
+  const [launch, setLaunch] = useState<Launch | null>(null);
   const timedOut = result.status === "timed_out";
   const items = result.breakdown ?? [];
   const failed = items.filter((i) => !i.ok).length;
 
+  const review = info?.google_review_url && rating >= (info?.review_threshold ?? 4);
+
   async function sendRating() {
+    // Con buena nota, Google se abre en este mismo clic (fuera del gesto el navegador lo bloquearía).
+    if (review) setLaunch(launchReview(info!.google_review_url!, comment));
     setBusy(true);
     setError("");
     try {
@@ -549,8 +554,6 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
       setBusy(false);
     }
   }
-
-  const review = info?.google_review_url && rating >= (info?.review_threshold ?? 4);
 
   return (
     <Screen className="space-y-5">
@@ -623,13 +626,20 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
           />
           {error && <p className="note note-error mt-4">{error}</p>}
           <button className="btn btn-primary mt-5" onClick={sendRating} disabled={rating === 0 || busy}>
-            Enviar valoración
+            {review ? (
+              <>
+                <GoogleMark /> Enviar y publicar en Google
+              </>
+            ) : (
+              "Enviar valoración"
+            )}
           </button>
+          {review && <p className="field-help">Se abrirá Google con tu cuenta para que publiques la reseña de la escuela.</p>}
         </div>
       ) : (
         <div className="sheet p-5 sm:p-7">
           {review ? (
-            <GoogleReview url={info!.google_review_url!} comment={comment} rating={rating} />
+            <GoogleReview url={info!.google_review_url!} comment={comment} rating={rating} launch={launch} />
           ) : (
             <>
               <h2 className="display text-2xl text-ink">Gracias por tu valoración</h2>

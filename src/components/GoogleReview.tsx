@@ -1,60 +1,71 @@
 import { Check, ClipboardCheck, ExternalLink } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-// Google no permite mostrar su formulario de reseñas dentro de otra web (X-Frame-Options: SAMEORIGIN)
-// ni publicar reseñas en nombre del usuario. Lo más cercano: abrir el formulario directamente
-// (en el móvil, en la app de Google Maps con la cuenta del alumno; en el ordenador, en una ventana
-// pequeña encima de la app), llevar ya copiado su comentario y darle las gracias al volver.
-export function GoogleReview({ url, comment, rating }: { url: string; comment: string; rating: number }) {
-  const [state, setState] = useState<"idle" | "open" | "done">("idle");
+// Google no permite mostrar su formulario de reseñas dentro de otra web (X-Frame-Options: SAMEORIGIN),
+// ni rellenar las estrellas o el texto desde fuera, ni publicar en nombre del usuario. Lo más cercano:
+// abrir el formulario en el mismo clic en que el alumno envía su valoración (en el móvil, en la app de
+// Google Maps con su cuenta; en el ordenador, en una ventana pequeña encima de la app), llevar su
+// comentario ya copiado y darle las gracias al volver.
+
+export type Launch = { win: Window | null; copied: Promise<boolean> };
+
+// Debe llamarse de forma síncrona dentro del clic: fuera del gesto, el navegador bloquea la ventana y el portapapeles.
+export function launchReview(url: string, comment: string): Launch {
+  const text = comment.trim();
+  const copied = text && navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false);
+  let win: Window | null;
+  if (window.matchMedia("(pointer: coarse)").matches) {
+    win = window.open(url, "_blank");
+  } else {
+    const w = 560;
+    const h = 760;
+    const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
+    const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - h) / 2));
+    win = window.open(url, "essa-resena", `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
+  }
+  return { win, copied };
+}
+
+export function GoogleReview({ url, comment, rating, launch }: { url: string; comment: string; rating: number; launch?: Launch | null }) {
+  const [state, setState] = useState<"idle" | "open" | "blocked" | "done">("idle");
   const [copied, setCopied] = useState(false);
   const timer = useRef<number | undefined>(undefined);
 
-  // Al volver a la app (móvil) consideramos la reseña hecha.
+  const follow = useCallback((l: Launch) => {
+    l.copied.then(setCopied);
+    window.clearInterval(timer.current);
+    if (!l.win) return setState("blocked");
+    setState("open");
+    // En el móvil la pestaña puede cerrarse sola al pasar a la app de Google Maps: ahí no sirve vigilarla.
+    if (window.matchMedia("(pointer: coarse)").matches) return;
+    // En el ordenador la ventana es nuestra: al cerrarla, damos las gracias.
+    timer.current = window.setInterval(() => {
+      if (l.win?.closed) {
+        window.clearInterval(timer.current);
+        setState("done");
+      }
+    }, 700);
+  }, []);
+
+  useEffect(() => {
+    if (launch) follow(launch);
+    return () => window.clearInterval(timer.current);
+  }, [launch, follow]);
+
+  // En el móvil: cuando el alumno se va a Google Maps y vuelve a la app, damos las gracias.
   useEffect(() => {
     if (state !== "open") return;
-    const onBack = () => document.visibilityState === "visible" && setState("done");
-    const t = setTimeout(() => document.addEventListener("visibilitychange", onBack), 800);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener("visibilitychange", onBack);
+    let away = document.visibilityState === "hidden";
+    const onChange = () => {
+      if (document.visibilityState === "hidden") away = true;
+      else if (away) setState("done");
     };
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
   }, [state]);
 
-  useEffect(() => () => window.clearInterval(timer.current), []);
-
-  function open() {
-    const text = comment.trim();
-    // Todo en el mismo clic: el navegador solo permite copiar y abrir ventanas durante el gesto.
-    if (text && navigator.clipboard) {
-      navigator.clipboard.writeText(text).then(
-        () => setCopied(true),
-        () => setCopied(false),
-      );
-    }
-    const touch = window.matchMedia("(pointer: coarse)").matches;
-    let win: Window | null = null;
-    if (touch) {
-      win = window.open(url, "_blank");
-    } else {
-      const w = 560;
-      const h = 760;
-      const left = Math.round(window.screenX + (window.outerWidth - w) / 2);
-      const top = Math.round(window.screenY + Math.max(0, (window.outerHeight - h) / 2));
-      win = window.open(url, "essa-resena", `popup=yes,width=${w},height=${h},left=${left},top=${top}`);
-      if (win) {
-        window.clearInterval(timer.current);
-        timer.current = window.setInterval(() => {
-          if (win?.closed) {
-            window.clearInterval(timer.current);
-            setState("done");
-          }
-        }, 700);
-      }
-    }
-    if (!win) window.open(url, "_blank", "noopener");
-    setState("open");
-  }
+  const open = () => follow(launchReview(url, comment));
+  const stars = `${rating} ${rating === 1 ? "estrella" : "estrellas"}`;
 
   if (state === "done")
     return (
@@ -69,39 +80,52 @@ export function GoogleReview({ url, comment, rating }: { url: string; comment: s
       </div>
     );
 
+  if (state === "open")
+    return (
+      <div>
+        <h2 className="display text-2xl text-ink">Termina tu reseña en Google</h2>
+        <ol className="mt-3 space-y-2 text-[16px] text-ink2">
+          {[
+            `Marca ${stars}.`,
+            copied ? "Pulsa en el cuadro de texto y elige «Pegar»: tu comentario ya está copiado." : "Escribe unas palabras sobre el curso (opcional).",
+            "Pulsa «Publicar».",
+          ].map((t, i) => (
+            <li key={i} className="grid grid-cols-[22px_1fr] gap-2">
+              <span className="display tnum text-lg leading-6 text-red">{i + 1}</span>
+              <span>{t}</span>
+            </li>
+          ))}
+        </ol>
+        {copied && (
+          <p className="mt-3 flex items-start gap-2 text-sm text-green">
+            <ClipboardCheck size={16} className="mt-0.5 shrink-0" /> Comentario copiado
+          </p>
+        )}
+        <p className="mt-4 text-sm text-muted">
+          ¿No se ha abierto?{" "}
+          <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-navy underline-offset-2 hover:underline">
+            Abrir la reseña <ExternalLink size={13} />
+          </a>
+        </p>
+      </div>
+    );
+
   return (
     <div>
       <h2 className="display text-2xl text-ink">¡Gracias! ¿Lo cuentas en Google?</h2>
       <p className="mt-1 text-[15px] text-ink2">
-        Se abrirá la ficha de la escuela en Google, ya en la ventana de reseña y con tu cuenta.{" "}
-        {comment.trim() ? "Tu comentario irá copiado: solo tienes que pegarlo y marcar " : "Solo tienes que marcar "}
-        {rating} {rating === 1 ? "estrella" : "estrellas"}.
+        {state === "blocked"
+          ? "Tu navegador no ha dejado abrir Google automáticamente. Pulsa el botón para abrir la reseña."
+          : "Se abrirá la ficha de la escuela en Google, en la ventana de reseña y con tu cuenta."}
       </p>
-
       <button className="btn btn-primary btn-lg mt-5 w-full sm:w-auto" onClick={open}>
         <GoogleMark /> Escribir reseña en Google
       </button>
-
-      {state === "open" && (
-        <div className="mt-4 space-y-2">
-          {copied && (
-            <p className="flex items-start gap-2 text-sm text-green">
-              <ClipboardCheck size={16} className="mt-0.5 shrink-0" /> Comentario copiado. En Google, mantén pulsado el cuadro de texto y elige «Pegar».
-            </p>
-          )}
-          <p className="text-sm text-muted">
-            ¿No se ha abierto?{" "}
-            <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-navy underline-offset-2 hover:underline">
-              Abrir la reseña <ExternalLink size={13} />
-            </a>
-          </p>
-        </div>
-      )}
     </div>
   );
 }
 
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" className="rounded-full bg-white p-[2px]">
       <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.5 30.2 0 24 0 14.6 0 6.6 5.4 2.7 13.3l7.8 6C12.4 13.6 17.7 9.5 24 9.5z" />
