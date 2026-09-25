@@ -22,6 +22,7 @@ export type AttemptState = {
   now: string;
   city: string;
   name: string;
+  locked: boolean;
 };
 
 export type StudentQuestion = { id: string; question: string; options: string[] };
@@ -29,6 +30,7 @@ export type StudentQuestion = { id: string; question: string; options: string[] 
 export type StartedAttempt = {
   ends_at: string;
   now: string;
+  locked: boolean;
   answers: Record<string, number>;
   questions: StudentQuestion[];
 };
@@ -83,6 +85,7 @@ export type Attempt = {
   pct: number | null;
   pass: boolean | null;
   exits: number;
+  locked: boolean;
   rating: number | null;
   comment: string | null;
   created_at: string;
@@ -127,6 +130,7 @@ const MESSAGES: Record<string, string> = {
   SESION: "La sesión de examen ya no está disponible.",
   MINUTOS: "La duración no es válida.",
   NO_PERSONAL: "Tu cuenta no pertenece al personal de ESSA.",
+  BLOQUEADO: "Tu examen está en pausa: pide a tu instructor que te deje continuar.",
 };
 
 export class ApiError extends Error {
@@ -170,6 +174,7 @@ export const api = {
   startSession: (id: string, minutes: number) => rpc<ExamSession>("start_session", { p_session: id, p_minutes: minutes }),
   extendSession: (id: string, minutes: number) => rpc<ExamSession>("extend_session", { p_session: id, p_minutes: minutes }),
   closeSession: (id: string) => rpc<void>("close_session", { p_session: id }),
+  unlockAttempt: (id: string) => rpc<void>("unlock_attempt", { p_attempt: id }),
 };
 
 // Cuentas del personal (función del servidor con la clave privada).

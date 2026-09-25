@@ -1,5 +1,5 @@
 import { AnimatePresence } from "motion/react";
-import { ArrowRight, LoaderCircle } from "lucide-react";
+import { ArrowRight, LoaderCircle, Lock } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Breakdown } from "../components/Breakdown";
@@ -10,7 +10,7 @@ import { PinInput } from "../components/PinInput";
 import { Screen } from "../components/Screen";
 import { Shell } from "../components/Shell";
 import { StarPicker } from "../components/Stars";
-import { api, errorMessage, type FinishResult, type PublicInfo, type StudentQuestion } from "../lib/api";
+import { api, ApiError, errorMessage, type FinishResult, type PublicInfo, type StudentQuestion } from "../lib/api";
 import { formatClock, syncClock, useCountdown } from "../lib/time";
 import { useTitle } from "../lib/useTitle";
 
@@ -93,7 +93,7 @@ export default function StudentApp() {
     window.scrollTo({ top: 0 });
   }, [stage]);
 
-  useTitle({ intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado", locked: "Examen bloqueado" }[stage]);
+  useTitle({ intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado", locked: "Examen abandonado" }[stage]);
 
   const finished = useCallback((r: FinishResult) => {
     setResult(r);
@@ -344,8 +344,17 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [exitOpen, setExitOpen] = useState(false);
+  const [locked, setLockedState] = useState(false);
+  const lockedRef = useRef(false);
+  const reporting = useRef(false);
   const finishing = useRef(false);
   const left = useCountdown(endsAt);
+
+  const setLocked = useCallback((v: boolean) => {
+    lockedRef.current = v;
+    setLockedState(v);
+    if (v) setSelected(null);
+  }, []);
 
   const finish = useCallback(
     async (reason: "done" | "left" | "timed_out") => {
@@ -371,39 +380,56 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
         syncClock(data.now);
         setQuestions(data.questions);
         setEndsAt(data.ends_at);
+        setLocked(!!data.locked);
         const firstOpen = data.questions.findIndex((q) => data.answers[q.id] === undefined);
         if (firstOpen === -1) return finish("done");
         setIdx(firstOpen);
       })
       .catch((e) => onGone(errorMessage(e)));
-  }, [attempt.token, finish, onGone]);
+  }, [attempt.token, finish, onGone, setLocked]);
 
   useEffect(() => {
     if (endsAt && left === 0) finish("timed_out");
   }, [left, endsAt, finish]);
 
-  // Cierre de la sesión o tiempo ampliado por el instructor.
+  // Cierre de la sesión, tiempo ampliado o desbloqueo por parte del instructor.
   useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const st = await api.attemptState(attempt.token);
-        if (!st) return;
-        syncClock(st.now);
-        if (st.session_status === "closed") finish("timed_out");
-        else if (st.ends_at) setEndsAt(st.ends_at);
-      } catch {
-        /* sin conexión momentánea */
-      }
-    }, 4000);
+    const id = setInterval(
+      async () => {
+        try {
+          const st = await api.attemptState(attempt.token);
+          if (!st) return;
+          syncClock(st.now);
+          if (st.session_status === "closed") return finish("timed_out");
+          if (st.ends_at) setEndsAt(st.ends_at);
+          // Mientras el aviso de salida no ha llegado al servidor, no nos fiamos de un "no bloqueado".
+          if (!reporting.current) setLocked(!!st.locked);
+        } catch {
+          /* sin conexión momentánea */
+        }
+      },
+      locked ? 2000 : 4000,
+    );
     return () => clearInterval(id);
-  }, [attempt.token, finish]);
+  }, [attempt.token, finish, locked, setLocked]);
 
-  // Aviso si el alumno sale de la pantalla.
+  // Salir de la pantalla bloquea el examen hasta que el instructor deje continuar.
+  // El navegador avisa dos veces de la misma salida (pérdida de foco y página oculta): solo cuenta la primera.
   useEffect(() => {
-    const onHide = () => {
-      if (finishing.current) return;
-      setExitOpen(true);
-      api.reportExit(attempt.token).catch(() => {});
+    const onHide = async () => {
+      if (finishing.current || lockedRef.current) return;
+      setLocked(true);
+      setExitOpen(false);
+      reporting.current = true;
+      for (let i = 0; i < 20; i++) {
+        try {
+          await api.reportExit(attempt.token);
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+      reporting.current = false;
     };
     const onVisibility = () => document.hidden && onHide();
     document.addEventListener("visibilitychange", onVisibility);
@@ -412,7 +438,7 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("blur", onHide);
     };
-  }, [attempt.token]);
+  }, [attempt.token, setLocked]);
 
   const next = useCallback(async () => {
     if (selected === null || saving) return;
@@ -425,16 +451,17 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
       if (idx + 1 < questions.length) setIdx(idx + 1);
       else await finish("done");
     } catch (e) {
-      setError(errorMessage(e));
+      if (e instanceof ApiError && e.code === "BLOQUEADO") setLocked(true);
+      else setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
-  }, [selected, saving, questions, idx, attempt.token, finish]);
+  }, [selected, saving, questions, idx, attempt.token, finish, setLocked]);
 
   // Teclado: A–F o 1–6 para elegir, Intro para continuar.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (exitOpen || !questions[idx]) return;
+      if (exitOpen || lockedRef.current || !questions[idx]) return;
       const k = e.key.toLowerCase();
       const n = "abcdef".indexOf(k) !== -1 ? "abcdef".indexOf(k) : "123456".indexOf(k);
       if (n !== -1 && n < questions[idx].options.length) setSelected(n);
@@ -452,8 +479,8 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
     <Screen>
       <Dialog
         open={exitOpen}
-        title="¿Quieres salir del examen?"
-        confirmLabel="Salir y entregar incompleto"
+        title="¿Abandonar el examen?"
+        confirmLabel="Abandonar y entregar"
         cancelLabel="Seguir con el examen"
         onConfirm={() => {
           setExitOpen(false);
@@ -461,8 +488,7 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
         }}
         onCancel={() => setExitOpen(false)}
       >
-        Has salido de la pantalla del examen. Si sales, se entregará como incompleto y no podrás volver a entrar. Tu instructor verá cuántas veces has
-        salido.
+        Se entregará como incompleto, con lo que hayas respondido hasta ahora, y no podrás volver a entrar.
       </Dialog>
 
       {!q ? (
@@ -491,6 +517,27 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
             <EcgProgress current={idx} total={questions.length} />
           </div>
 
+          {locked ? (
+            <div className="sheet overflow-hidden" role="alert">
+              <div className="flex items-center gap-3 border-b border-amber/30 bg-amber-soft px-5 py-3.5 sm:px-7">
+                <Lock size={17} className="shrink-0 text-amber" />
+                <span className="text-[15px] font-semibold text-amber">Examen en pausa</span>
+              </div>
+              <div className="p-5 sm:p-7">
+                <h1 className="display text-3xl text-ink">Has salido de la pantalla del examen</h1>
+                <p className="mt-2 text-[16px] leading-relaxed text-ink2">
+                  Para seguir, avisa a tu instructor: tiene que dejarte continuar desde su panel. Tus respuestas están guardadas y el tiempo sigue corriendo.
+                </p>
+                <p className="mt-5 flex items-center gap-2.5 text-[15px] font-medium text-ink">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-sm bg-amber opacity-40" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-sm bg-amber" />
+                  </span>
+                  Esperando al instructor…
+                </p>
+              </div>
+            </div>
+          ) : (
           <div className="sheet p-5 sm:p-7">
             <h1 className="text-[21px] leading-snug font-semibold text-ink sm:text-2xl" id="q-text">
               {q.question}
@@ -539,6 +586,7 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
               </button>
             </div>
           </div>
+          )}
 
           <button className="btn btn-ghost mt-4 text-muted" onClick={() => setExitOpen(true)}>
             Abandonar el examen
@@ -674,11 +722,11 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
 function Locked({ onHome }: { onHome: () => void }) {
   return (
     <Screen>
-      <PageHead eyebrow="Examen bloqueado" title="Has salido del examen">
-        Saliste de la pantalla durante la evaluación y elegiste no continuar. El examen se ha entregado como incompleto.
+      <PageHead eyebrow="Examen entregado incompleto" title="Has abandonado el examen">
+        Se ha entregado con las respuestas que diste hasta ese momento.
       </PageHead>
       <div className="sheet p-5 sm:p-7">
-        <p className="text-[16px] text-ink2">Si ha sido un error, habla con tu instructor: él puede ver el registro y decidir cómo seguir.</p>
+        <p className="text-[16px] text-ink2">Si ha sido un error, habla con tu instructor: puede ver el registro y decidir cómo seguir.</p>
         <button className="btn btn-secondary mt-5" onClick={onHome}>
           Volver al inicio
         </button>

@@ -1,4 +1,4 @@
-import { Check, Copy, LoaderCircle, MonitorUp, Play, Plus, Square } from "lucide-react";
+import { Check, Copy, LoaderCircle, MonitorUp, Play, Plus, Square, Unlock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "../components/Dialog";
 import { api, errorMessage, type Attempt, type ExamSession, type Staff } from "../lib/api";
@@ -8,7 +8,8 @@ import { joinUrl, Projector } from "./Projector";
 import { Loading, Page } from "./Page";
 import { useLive } from "./useLive";
 
-export function StatusText({ a }: { a: Pick<Attempt, "status" | "score" | "total"> }) {
+export function StatusText({ a }: { a: Pick<Attempt, "status" | "score" | "total"> & { locked?: boolean } }) {
+  if (a.status === "in_progress" && a.locked) return <span className="status status-amber font-semibold text-amber">Bloqueado</span>;
   switch (a.status) {
     case "waiting":
       return <span className="status">En sala</span>;
@@ -34,6 +35,7 @@ export function ExamTab({ me }: { me: Staff }) {
   const [confirmClose, setConfirmClose] = useState(false);
   const [projecting, setProjecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [unlocking, setUnlocking] = useState<string | null>(null);
   const [recent, setRecent] = useState<(ExamSession & { attempts: { count: number }[] })[]>([]);
   const left = useCountdown(session?.status === "running" ? session.ends_at : null);
 
@@ -96,6 +98,19 @@ export function ExamTab({ me }: { me: Staff }) {
       setError(errorMessage(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function unlock(a: Attempt) {
+    setUnlocking(a.id);
+    setError("");
+    try {
+      await api.unlockAttempt(a.id);
+      setAttempts((list) => list.map((x) => (x.id === a.id ? { ...x, locked: false } : x)));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setUnlocking(null);
     }
   }
 
@@ -265,6 +280,17 @@ export function ExamTab({ me }: { me: Staff }) {
       </div>
 
       {/* Alumnos */}
+      {attempts.some((a) => a.locked && a.status === "in_progress") && (
+        <p className="note note-warn mt-6 font-medium" role="status">
+          {(() => {
+            const n = attempts.filter((a) => a.locked && a.status === "in_progress").length;
+            return n === 1
+              ? "Un alumno ha salido de la pantalla y espera que le dejes continuar."
+              : `${n} alumnos han salido de la pantalla y esperan que les dejes continuar.`;
+          })()}
+        </p>
+      )}
+
       <div className="mt-8 mb-3 flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="display text-2xl text-ink">Alumnos</h2>
         <p className="tnum text-sm text-ink2">
@@ -283,6 +309,7 @@ export function ExamTab({ me }: { me: Staff }) {
                 <th>Progreso</th>
                 <th className="num">Salidas</th>
                 <th className="num">Nota</th>
+                <th />
               </tr>
             </thead>
             <tbody>
@@ -290,7 +317,7 @@ export function ExamTab({ me }: { me: Staff }) {
                 const total = a.question_ids?.length ?? 0;
                 const answered = Object.keys(a.answers ?? {}).length;
                 return (
-                  <tr key={a.id}>
+                  <tr key={a.id} className={a.locked && a.status === "in_progress" ? "bg-amber-soft/60" : ""}>
                     <td className="font-medium text-ink">{a.name}</td>
                     <td>
                       <StatusText a={a} />
@@ -317,6 +344,13 @@ export function ExamTab({ me }: { me: Staff }) {
                         </span>
                       ) : (
                         <span className="font-normal text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {a.locked && a.status === "in_progress" && (
+                        <button className="btn btn-primary btn-sm" disabled={unlocking === a.id} onClick={() => unlock(a)}>
+                          {unlocking === a.id ? <LoaderCircle size={15} className="animate-spin" /> : <Unlock size={15} />} Dejar continuar
+                        </button>
                       )}
                     </td>
                   </tr>

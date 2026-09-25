@@ -10,7 +10,8 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 1. Escribe su nombre, elige ciudad e introduce el PIN de 6 cifras que le da el instructor.
 2. Espera en la sala hasta que el instructor inicia el examen (empieza solo).
 3. Responde con cuenta atrás; la línea de ECG avanza con cada pregunta.
-4. Si sale de la pantalla aparece un aviso; si confirma que sale, el examen queda bloqueado como abandonado.
+4. Si sale de la pantalla (cambia de app o de pestaña), el examen se pone en pausa y solo sigue cuando el instructor le
+   deja continuar desde la sala. El bloqueo está en el servidor: recargar la página no lo quita.
 5. Ve su nota (APTO / NO APTO) y, si está activado, las correcciones con explicación.
 6. Valora el curso; con nota alta se le invita a dejar reseña en Google.
 
@@ -20,7 +21,7 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
   ciudad y el código ya puestos; solo escribe su nombre.
 - Elige la duración e inicia el examen para todos; puede ampliar 5 minutos o terminarlo.
 - Seguimiento en directo: quién espera, quién responde (y cuántas lleva), quién terminó y con qué nota, quién abandonó y
-  cuántas veces salió de la pantalla.
+  cuántas veces salió de la pantalla. Los alumnos bloqueados aparecen resaltados con el botón «Dejar continuar».
 - Historial por ciudad → día → alumno → preguntas falladas, con buscador de alumnos. Exportación a CSV.
 - Estadísticas: aprobados, nota media, valoración media, preguntas que más se fallan y últimas opiniones.
 
