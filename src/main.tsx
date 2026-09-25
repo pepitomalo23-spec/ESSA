@@ -10,6 +10,13 @@ import "@fontsource/barlow-condensed/latin-600.css";
 import "@fontsource/barlow-condensed/latin-700.css";
 import "./index.css";
 
+// La web no se amplía: Safari en iPhone ignora user-scalable=no, así que se cortan también sus gestos de pellizco
+// (y el pellizco del trackpad, que llega como rueda con Ctrl).
+const noZoom = (e: Event) => e.preventDefault();
+document.addEventListener("gesturestart", noZoom);
+document.addEventListener("gesturechange", noZoom);
+document.addEventListener("wheel", (e) => e.ctrlKey && e.preventDefault(), { passive: false });
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <App />

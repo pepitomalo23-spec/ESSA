@@ -15,13 +15,15 @@ import { formatClock, syncClock, useCountdown } from "../lib/time";
 import { scrollToTop } from "../lib/scroll";
 import { useTitle } from "../lib/useTitle";
 
-type Stage = "intro" | "waiting" | "quiz" | "result" | "locked";
+type Stage = "boot" | "intro" | "waiting" | "quiz" | "result";
 type Saved = { token: string; name: string; city: string };
 
+// El alumno que entra se queda dentro en este dispositivo aunque cierre el navegador:
+// al volver, sigue en su examen o en su resultado (y ve la corrección cuando el instructor la muestre).
 const STORE = "essa-attempt";
 const loadSaved = (): Saved | null => {
   try {
-    const raw = sessionStorage.getItem(STORE);
+    const raw = localStorage.getItem(STORE) ?? sessionStorage.getItem(STORE);
     return raw ? (JSON.parse(raw) as Saved) : null;
   } catch {
     return null;
@@ -29,15 +31,16 @@ const loadSaved = (): Saved | null => {
 };
 const save = (s: Saved | null) => {
   try {
-    if (s) sessionStorage.setItem(STORE, JSON.stringify(s));
-    else sessionStorage.removeItem(STORE);
+    sessionStorage.removeItem(STORE);
+    if (s) localStorage.setItem(STORE, JSON.stringify(s));
+    else localStorage.removeItem(STORE);
   } catch {
     /* almacenamiento no disponible */
   }
 };
 
 export default function StudentApp() {
-  const [stage, setStage] = useState<Stage>("intro");
+  const [stage, setStage] = useState<Stage>(() => (loadSaved() ? "boot" : "intro"));
   const [info, setInfo] = useState<PublicInfo | null>(null);
   const [attempt, setAttempt] = useState<Saved | null>(null);
   const [result, setResult] = useState<FinishResult | null>(null);
@@ -59,26 +62,6 @@ export default function StudentApp() {
     };
   }, []);
 
-  // Si se recarga la página, recupera el examen en curso de esta pestaña.
-  useEffect(() => {
-    const saved = loadSaved();
-    if (!saved) return;
-    api
-      .attemptState(saved.token)
-      .then(async (st) => {
-        if (!st) return save(null);
-        setAttempt(saved);
-        if (st.attempt_status === "waiting") setStage(st.session_status === "running" ? "quiz" : "waiting");
-        else if (st.attempt_status === "in_progress") setStage("quiz");
-        else if (st.attempt_status === "left") setStage("locked");
-        else {
-          setResult(await api.finishAttempt(saved.token, "done"));
-          setStage("result");
-        }
-      })
-      .catch(() => {});
-  }, []);
-
   const reset = useCallback((message = "") => {
     save(null);
     setAttempt(null);
@@ -87,6 +70,42 @@ export default function StudentApp() {
     setStage("intro");
   }, []);
 
+  // Al abrir la web, el alumno que ya entró vuelve donde estaba: sala, examen o resultado.
+  useEffect(() => {
+    const saved = loadSaved();
+    if (!saved) return;
+    // Si llega con el QR de otro examen y el suyo ya terminó, entra al nuevo.
+    const newExam = new URLSearchParams(window.location.search).has("codigo");
+    let alive = true;
+    let retry: number | undefined;
+    const restore = async () => {
+      try {
+        const st = await api.attemptState(saved.token);
+        if (!alive) return;
+        if (!st) return reset();
+        if (st.attempt_status === "waiting" || st.attempt_status === "in_progress") {
+          setAttempt(saved);
+          setStage(st.attempt_status === "in_progress" || st.session_status === "running" ? "quiz" : "waiting");
+          return;
+        }
+        if (newExam) return reset();
+        const r = await api.attemptResult(saved.token);
+        if (!alive) return;
+        if (!r) return reset();
+        setAttempt(saved);
+        setResult(r);
+        setStage("result");
+      } catch {
+        retry = window.setTimeout(restore, 3000);
+      }
+    };
+    restore();
+    return () => {
+      alive = false;
+      window.clearTimeout(retry);
+    };
+  }, [reset]);
+
   const goQuiz = useCallback(() => setStage("quiz"), []);
 
   // Cada pantalla empieza arriba (tras entregar, el botón quedaba al final de la página).
@@ -94,11 +113,11 @@ export default function StudentApp() {
     scrollToTop();
   }, [stage]);
 
-  useTitle({ intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado", locked: "Examen abandonado" }[stage]);
+  useTitle({ boot: "Evaluación", intro: "Acceso al examen", waiting: "Sala de espera", quiz: "Examen en curso", result: "Resultado" }[stage]);
 
   const finished = useCallback((r: FinishResult) => {
     setResult(r);
-    setStage(r.status === "left" ? "locked" : "result");
+    setStage("result");
   }, []);
 
   return (
@@ -114,6 +133,11 @@ export default function StudentApp() {
       }
     >
       <AnimatePresence mode="wait">
+        {stage === "boot" && (
+          <div key="boot" className="flex items-center gap-3 py-24 text-muted">
+            <LoaderCircle size={18} className="animate-spin" /> Recuperando tu examen…
+          </div>
+        )}
         {stage === "intro" && (
           <Intro
             key="intro"
@@ -129,8 +153,7 @@ export default function StudentApp() {
         )}
         {stage === "waiting" && attempt && <Waiting key="waiting" attempt={attempt} onStart={goQuiz} onLeave={reset} />}
         {stage === "quiz" && attempt && <Quiz key="quiz" attempt={attempt} onFinished={finished} onGone={reset} />}
-        {stage === "result" && attempt && result && <Result key="result" attempt={attempt} result={result} info={info} onHome={() => reset()} />}
-        {stage === "locked" && <Locked key="locked" onHome={() => reset()} />}
+        {stage === "result" && attempt && result && <Result key="result" attempt={attempt} initial={result} info={info} onExit={() => reset()} />}
       </AnimatePresence>
     </Shell>
   );
@@ -188,12 +211,11 @@ function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: st
   }
 
   return (
-    <Screen className="relative z-[1] -mt-24 sm:-mt-28">
-
-      <form className="sheet space-y-5 p-5 shadow-[0_24px_48px_-28px_rgb(11_27_47/0.45)] sm:p-7" onSubmit={submit} noValidate>
+    <Screen className="relative z-[1] -mt-[4.5rem] sm:-mt-20">
+      <form className="sheet space-y-4 p-5 shadow-[0_24px_48px_-28px_rgb(11_27_47/0.45)] sm:space-y-5 sm:p-7" onSubmit={submit} noValidate>
         <div>
-          <h2 className="display text-[28px] text-ink">Acceso al examen</h2>
-          <p className="mt-1 text-[15px] text-ink2">Escribe tu nombre, elige tu ciudad y el código que te dé tu instructor.</p>
+          <h2 className="display text-[26px] text-ink sm:text-[28px]">Acceso al examen</h2>
+          <p className="mt-1 hidden text-[15px] text-ink2 sm:block">Escribe tu nombre, elige tu ciudad y el código que te dé tu instructor.</p>
         </div>
         {notice && <p className="note note-warn">{notice}</p>}
         {prefill.pin && !notice && (
@@ -283,22 +305,28 @@ function Intro({ info, notice, onJoined }: { info: PublicInfo | null; notice: st
   );
 }
 
-// Banda de bienvenida del acceso: saludo, fecha y el tono tranquilo que necesita alguien que va a examinarse.
+// Banda de bienvenida del acceso: continúa el azul de la cabecera, sin corte. En el móvil es corta para que
+// el recuadro de acceso se vea entero sin desplazar.
 function Welcome({ info }: { info: PublicInfo | null }) {
   const today = new Date().toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
   return (
     <section className="relative shrink-0 overflow-hidden bg-brand-deep text-white">
-      <svg className="pointer-events-none absolute inset-x-0 bottom-10 h-16 w-full opacity-25" viewBox="0 0 600 60" preserveAspectRatio="none" aria-hidden="true">
+      <svg
+        className="pointer-events-none absolute right-0 bottom-14 hidden h-8 w-full opacity-25 sm:block"
+        viewBox="0 0 600 60"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
         <path d="M0,30 L360,30 L372,30 L380,10 L390,52 L400,30 L412,30 L420,22 L428,30 L600,30" fill="none" stroke="#ef5b52" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="relative mx-auto max-w-[640px] px-4 pt-10 pb-32 sm:pt-14 sm:pb-36">
-        <p className="eyebrow text-white/60 first-letter:uppercase">{today}</p>
-        <h1 className="display mt-3 text-[44px] leading-[0.98] sm:text-6xl">
+      <div className="relative mx-auto max-w-[640px] px-4 pt-3 pb-16 short:pb-14 sm:pt-8 sm:pb-24">
+        <p className="eyebrow text-white/55 first-letter:uppercase short:hidden">{today}</p>
+        <h1 className="display mt-1.5 text-[32px] leading-[1.02] short:mt-0 short:text-[28px] sm:mt-2 sm:text-5xl">
           Te damos la bienvenida
           <br />
-          <span className="text-white/70">a tu evaluación.</span>
+          <span className="text-white/65">a tu evaluación.</span>
         </h1>
-        <p className="mt-4 max-w-[46ch] text-[17px] leading-relaxed text-white/80">
+        <p className="mt-3 hidden max-w-[50ch] text-[17px] leading-relaxed text-white/75 sm:block">
           Hoy toca demostrar lo aprendido en el curso de <strong className="font-semibold text-white">{info?.exam_title ?? "Primeros Auxilios"}</strong>. Lee cada
           pregunta con calma: lo has practicado.
         </p>
@@ -648,16 +676,42 @@ function Quiz({ attempt, onFinished, onGone }: { attempt: Saved; onFinished: (r:
 }
 
 // ── 4. Resultado y valoración ─────────────────────────────────────────────
-function Result({ attempt, result, info, onHome }: { attempt: Saved; result: FinishResult; info: PublicInfo | null; onHome: () => void }) {
+function Result({ attempt, initial, info, onExit }: { attempt: Saved; initial: FinishResult; info: PublicInfo | null; onExit: () => void }) {
+  const [result, setResult] = useState(initial);
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
-  const [sent, setSent] = useState(false);
+  const [sent, setSent] = useState(!!initial.rated);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [onlyFailed, setOnlyFailed] = useState(false);
+  const [exitOpen, setExitOpen] = useState(false);
+  const left = result.status === "left";
   const timedOut = result.status === "timed_out";
+  const pending = !!result.reviewable && !result.released;
   const items = result.breakdown ?? [];
   const failed = items.filter((i) => !i.ok).length;
+
+  // Mientras la corrección está pendiente, se comprueba si el instructor ya la ha mostrado.
+  useEffect(() => {
+    if (!pending) return;
+    let alive = true;
+    const check = async () => {
+      try {
+        const r = await api.attemptResult(attempt.token);
+        if (alive && r) setResult(r);
+      } catch {
+        /* se reintenta */
+      }
+    };
+    const id = setInterval(check, 5000);
+    const onBack = () => document.visibilityState === "visible" && check();
+    document.addEventListener("visibilitychange", onBack);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onBack);
+    };
+  }, [pending, attempt.token]);
 
   async function sendRating() {
     setBusy(true);
@@ -676,28 +730,71 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
 
   return (
     <Screen className="space-y-5">
+      <Dialog
+        open={exitOpen}
+        title="¿Salir de tu resultado?"
+        confirmLabel="Salir"
+        cancelLabel="Quedarme"
+        onConfirm={() => {
+          setExitOpen(false);
+          onExit();
+        }}
+        onCancel={() => setExitOpen(false)}
+      >
+        Dejarás de ver tu resultado en este dispositivo{pending ? " y no podrás ver la corrección cuando tu instructor la muestre" : ""}.
+      </Dialog>
+
       <div>
-        <p className="eyebrow">Resultado · {attempt.city}</p>
-        <h1 className="display mt-2 text-[40px] text-ink sm:text-5xl">{timedOut ? "Tiempo agotado" : "Examen entregado"}</h1>
+        <p className="eyebrow">{left ? "Examen entregado incompleto" : `Resultado · ${attempt.city}`}</p>
+        <h1 className="display mt-2 text-[40px] text-ink sm:text-5xl">{left ? "Has abandonado el examen" : timedOut ? "Tiempo agotado" : "Examen entregado"}</h1>
       </div>
 
       {timedOut && <p className="note note-warn">Se acabó el tiempo o el instructor cerró la sesión. Se han corregido las respuestas que diste hasta ese momento.</p>}
 
-      <div className="sheet grid grid-cols-2 divide-x divide-line">
-        <div className="p-5 sm:p-7">
-          <p className="eyebrow">Aciertos</p>
-          <p className="display tnum mt-1 text-6xl text-ink sm:text-7xl">
-            {result.score}
-            <span className="text-3xl text-muted sm:text-4xl">/{result.total}</span>
+      {left ? (
+        <div className="sheet p-5 sm:p-7">
+          <p className="text-[16px] leading-relaxed text-ink2">
+            Se ha entregado con las respuestas que diste hasta ese momento. Si ha sido un error, habla con tu instructor: puede ver el registro y decidir cómo
+            seguir.
           </p>
-          <p className="tnum mt-1 text-[15px] text-muted">{result.pct} % de aciertos</p>
         </div>
-        <div className="p-5 sm:p-7">
-          <p className="eyebrow">Calificación</p>
-          <p className={`display mt-1 text-5xl sm:text-6xl ${result.pass ? "text-green" : "text-red"}`}>{result.pass ? "APTO" : "NO APTO"}</p>
-          <p className="mt-1 text-[15px] text-muted">{result.pass ? "Has superado la evaluación." : "No has alcanzado la nota mínima."}</p>
+      ) : (
+        <div className="sheet grid grid-cols-2 divide-x divide-line">
+          <div className="p-5 sm:p-7">
+            <p className="eyebrow">Aciertos</p>
+            <p className="display tnum mt-1 text-6xl text-ink sm:text-7xl">
+              {result.score}
+              <span className="text-3xl text-muted sm:text-4xl">/{result.total}</span>
+            </p>
+            <p className="tnum mt-1 text-[15px] text-muted">{result.pct} % de aciertos</p>
+          </div>
+          <div className="p-5 sm:p-7">
+            <p className="eyebrow">Calificación</p>
+            <p className={`display mt-1 text-5xl sm:text-6xl ${result.pass ? "text-green" : "text-red"}`}>{result.pass ? "APTO" : "NO APTO"}</p>
+            <p className="mt-1 text-[15px] text-muted">{result.pass ? "Has superado la evaluación." : "No has alcanzado la nota mínima."}</p>
+          </div>
         </div>
-      </div>
+      )}
+
+      {pending && (
+        <div className="sheet overflow-hidden" role="status">
+          <div className="flex items-center gap-3 border-b border-line bg-sunken px-5 py-3.5 sm:px-7">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-sm bg-navy opacity-30" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-sm bg-navy" />
+            </span>
+            <span className="text-[15px] font-medium text-ink">Corrección pendiente</span>
+          </div>
+          <div className="p-5 sm:p-7">
+            <p className="text-[16px] leading-relaxed text-ink2">
+              Tu instructor mostrará las respuestas correctas cuando terminen todos. Aparecerán aquí solas.
+            </p>
+            <p className="mt-3 text-[15px] leading-relaxed text-muted">
+              Puedes cerrar la página tranquilamente: al volver a abrirla en este dispositivo, entrarás directamente a tu resultado.
+            </p>
+          </div>
+        </div>
+      )}
 
       {!sent ? (
         <div className="sheet p-5 sm:p-7">
@@ -761,26 +858,12 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
         </div>
       )}
 
-      <button className="btn btn-secondary" onClick={onHome}>
-        Volver al inicio
-      </button>
-    </Screen>
-  );
-}
-
-// ── 5. Examen bloqueado ───────────────────────────────────────────────────
-function Locked({ onHome }: { onHome: () => void }) {
-  return (
-    <Screen>
-      <PageHead eyebrow="Examen entregado incompleto" title="Has abandonado el examen">
-        Se ha entregado con las respuestas que diste hasta ese momento.
-      </PageHead>
-      <div className="sheet p-5 sm:p-7">
-        <p className="text-[16px] text-ink2">Si ha sido un error, habla con tu instructor: puede ver el registro y decidir cómo seguir.</p>
-        <button className="btn btn-secondary mt-5" onClick={onHome}>
-          Volver al inicio
+      <p className="pt-2 text-sm text-muted">
+        ¿Otra persona va a usar este dispositivo?{" "}
+        <button className="cursor-pointer font-medium text-ink2 underline-offset-2 hover:text-ink hover:underline" onClick={() => setExitOpen(true)}>
+          Salir de mi resultado
         </button>
-      </div>
+      </p>
     </Screen>
   );
 }

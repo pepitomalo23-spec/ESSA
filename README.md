@@ -12,8 +12,11 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 3. Responde con cuenta atrás; la línea de ECG avanza con cada pregunta.
 4. Si sale de la pantalla (cambia de app o de pestaña), el examen se pone en pausa y solo sigue cuando el instructor le
    deja continuar desde la sala. El bloqueo está en el servidor: recargar la página no lo quita.
-5. Ve su nota (APTO / NO APTO) y, si está activado, las correcciones con explicación.
-6. Valora el curso; con nota alta se le invita a dejar reseña en Google.
+5. Ve su nota (APTO / NO APTO) al momento. La corrección con explicaciones le aparece sola cuando el instructor la
+   muestra, para que nadie pase respuestas a quien sigue examinándose.
+6. Una vez dentro, se queda dentro en su móvil aunque cierre el navegador: al volver a abrir la web sigue en su examen o
+   en su resultado.
+7. Valora el curso; con nota alta se le invita a dejar reseña en Google.
 
 **Instructor** (`/personal`)
 - Abre un examen por ciudad → se genera el PIN → ve la sala de espera en directo.
@@ -22,6 +25,8 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 - Elige la duración e inicia el examen para todos; puede ampliar 5 minutos o terminarlo.
 - Seguimiento en directo: quién espera, quién responde (y cuántas lleva), quién terminó y con qué nota, quién abandonó y
   cuántas veces salió de la pantalla. Los alumnos bloqueados aparecen resaltados con el botón «Dejar continuar».
+- **Mostrar corrección**: desde la sala (o después, en «Tus últimos exámenes») decide cuándo ven los alumnos las
+  respuestas correctas; puede volver a ocultarlas.
 - Historial por ciudad → día → alumno → preguntas falladas, con buscador de alumnos. Exportación a CSV.
 - Estadísticas: aprobados, nota media, valoración media, preguntas que más se fallan y últimas opiniones.
 

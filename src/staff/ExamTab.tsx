@@ -1,4 +1,4 @@
-import { Check, Copy, LoaderCircle, MonitorUp, Play, Plus, Square, Unlock } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, LoaderCircle, MonitorUp, Play, Plus, Square, Unlock } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Dialog } from "../components/Dialog";
 import { api, errorMessage, type Attempt, type ExamSession, type Staff } from "../lib/api";
@@ -36,6 +36,8 @@ export function ExamTab({ me }: { me: Staff }) {
   const [projecting, setProjecting] = useState(false);
   const [copied, setCopied] = useState(false);
   const [unlocking, setUnlocking] = useState<string | null>(null);
+  const [releasing, setReleasing] = useState<string | null>(null);
+  const [confirmRelease, setConfirmRelease] = useState(false);
   const [recent, setRecent] = useState<(ExamSession & { attempts: { count: number }[] })[]>([]);
   const left = useCountdown(session?.status === "running" ? session.ends_at : null);
 
@@ -114,6 +116,21 @@ export function ExamTab({ me }: { me: Staff }) {
     }
   }
 
+  // Mostrar u ocultar la corrección a los alumnos de una sesión (también de las ya terminadas).
+  async function toggleRelease(s: ExamSession) {
+    setReleasing(s.id);
+    setError("");
+    try {
+      const upd = await api.releaseAnswers(s.id, !s.answers_released);
+      setSession((cur) => (cur && cur.id === s.id ? { ...cur, answers_released: upd.answers_released } : cur));
+      setRecent((list) => list.map((r) => (r.id === s.id ? { ...r, answers_released: upd.answers_released } : r)));
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setReleasing(null);
+    }
+  }
+
   if (session === undefined) return <Loading />;
 
   const count = (s: Attempt["status"]) => attempts.filter((a) => a.status === s).length;
@@ -161,6 +178,7 @@ export function ExamTab({ me }: { me: Staff }) {
                     <th>Ciudad</th>
                     <th className="num">Duración</th>
                     <th className="num">Alumnos</th>
+                    <th>Corrección</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -172,12 +190,35 @@ export function ExamTab({ me }: { me: Staff }) {
                       <td>{r.city}</td>
                       <td className="num text-muted">{r.duration_minutes ? `${r.duration_minutes} min` : "No empezó"}</td>
                       <td className="num font-medium">{r.attempts?.[0]?.count ?? 0}</td>
+                      <td>
+                        {r.duration_minutes ? (
+                          <button
+                            className={`btn btn-sm ${r.answers_released ? "btn-ghost -ml-3 text-green" : "btn-secondary"}`}
+                            disabled={releasing === r.id}
+                            onClick={() => toggleRelease(r)}
+                            title={r.answers_released ? "Los alumnos la ven. Pulsa para ocultarla." : "Los alumnos aún no la ven."}
+                          >
+                            {releasing === r.id ? (
+                              <LoaderCircle size={15} className="animate-spin" />
+                            ) : r.answers_released ? (
+                              <Eye size={15} />
+                            ) : (
+                              <EyeOff size={15} />
+                            )}
+                            {r.answers_released ? "Visible" : "Mostrar"}
+                          </button>
+                        ) : (
+                          <span className="text-sm text-muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <p className="mt-2 text-sm text-muted">Los resultados completos están en Historial.</p>
+            <p className="mt-2 text-sm text-muted">
+              Al entregar, los alumnos solo ven su nota: la corrección les aparece cuando pulsas «Mostrar». Los resultados completos están en Historial.
+            </p>
           </section>
         )}
       </Page>
@@ -279,6 +320,31 @@ export function ExamTab({ me }: { me: Staff }) {
         </div>
       </div>
 
+      {/* Corrección para los alumnos */}
+      {running && (
+        <div className="sheet mt-4 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4 sm:px-7">
+          <div className="flex min-w-0 items-start gap-3">
+            {session.answers_released ? <Eye size={19} className="mt-0.5 shrink-0 text-green" /> : <EyeOff size={19} className="mt-0.5 shrink-0 text-muted" />}
+            <div>
+              <p className="font-semibold text-ink">{session.answers_released ? "Corrección visible para los alumnos" : "Corrección oculta a los alumnos"}</p>
+              <p className="text-sm text-muted">
+                {session.answers_released
+                  ? "Ven en su móvil qué respuestas eran correctas."
+                  : "Al entregar solo ven su nota. Muéstrala cuando hayan terminado todos; les aparece sola."}
+              </p>
+            </div>
+          </div>
+          <button
+            className={`btn btn-sm ${session.answers_released ? "btn-secondary" : "btn-primary"}`}
+            disabled={releasing === session.id}
+            onClick={() => (!session.answers_released && count("in_progress") > 0 ? setConfirmRelease(true) : toggleRelease(session))}
+          >
+            {releasing === session.id && <LoaderCircle size={15} className="animate-spin" />}
+            {session.answers_released ? "Ocultar corrección" : "Mostrar corrección"}
+          </button>
+        </div>
+      )}
+
       {/* Alumnos */}
       {attempts.some((a) => a.locked && a.status === "in_progress") && (
         <p className="note note-warn mt-6 font-medium" role="status">
@@ -364,6 +430,22 @@ export function ExamTab({ me }: { me: Staff }) {
       {projecting && <Projector session={session} waiting={count("waiting")} onClose={() => setProjecting(false)} />}
 
       <Dialog
+        open={confirmRelease}
+        title="¿Mostrar ya la corrección?"
+        confirmLabel="Mostrar igualmente"
+        cancelLabel="Esperar"
+        tone="primary"
+        onCancel={() => setConfirmRelease(false)}
+        onConfirm={() => {
+          setConfirmRelease(false);
+          toggleRelease(session);
+        }}
+      >
+        {count("in_progress") === 1 ? "Aún hay 1 alumno respondiendo." : `Aún hay ${count("in_progress")} alumnos respondiendo.`} Quien ya ha entregado podría
+        pasarle las respuestas.
+      </Dialog>
+
+      <Dialog
         open={confirmClose}
         title={running ? "¿Terminar el examen?" : "¿Cerrar la sala?"}
         confirmLabel={running ? "Terminar examen" : "Cerrar sala"}
@@ -376,7 +458,7 @@ export function ExamTab({ me }: { me: Staff }) {
         }}
       >
         {running
-          ? "Quien siga respondiendo entregará con lo que lleve contestado. El código dejará de funcionar."
+          ? "Quien siga respondiendo entregará con lo que lleve contestado. El código dejará de funcionar. Después podrás mostrar la corrección desde «Tus últimos exámenes»."
           : "Los alumnos de la sala volverán al inicio y el código dejará de funcionar."}
       </Dialog>
     </Page>

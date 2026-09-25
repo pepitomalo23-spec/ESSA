@@ -51,6 +51,12 @@ export type FinishResult = {
   total: number;
   pct: number;
   pass: boolean;
+  /** La escuela enseña la corrección a los alumnos (Ajustes). */
+  reviewable?: boolean;
+  /** El examinador ya ha mostrado la corrección. */
+  released?: boolean;
+  /** El alumno ya dejó su valoración. */
+  rated?: boolean;
   breakdown: ResultItem[] | null;
 };
 
@@ -68,6 +74,7 @@ export type ExamSession = {
   ends_at: string | null;
   created_at: string;
   closed_at: string | null;
+  answers_released: boolean;
 };
 
 export type Attempt = {
@@ -166,6 +173,7 @@ export const api = {
   reportExit: (token: string) => rpc<void>("report_exit", { p_token: token }),
   finishAttempt: (token: string, reason: "done" | "left" | "timed_out") =>
     rpc<FinishResult>("finish_attempt", { p_token: token, p_reason: reason }),
+  attemptResult: (token: string) => rpc<FinishResult | null>("attempt_result", { p_token: token }),
   rateAttempt: (token: string, rating: number, comment: string) =>
     rpc<void>("rate_attempt", { p_token: token, p_rating: rating, p_comment: comment }),
 
@@ -175,6 +183,7 @@ export const api = {
   extendSession: (id: string, minutes: number) => rpc<ExamSession>("extend_session", { p_session: id, p_minutes: minutes }),
   closeSession: (id: string) => rpc<void>("close_session", { p_session: id }),
   unlockAttempt: (id: string) => rpc<void>("unlock_attempt", { p_attempt: id }),
+  releaseAnswers: (id: string, release: boolean) => rpc<ExamSession>("release_answers", { p_session: id, p_release: release }),
 };
 
 // Cuentas del personal (función del servidor con la clave privada).
