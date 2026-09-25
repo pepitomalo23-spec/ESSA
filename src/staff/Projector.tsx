@@ -37,9 +37,7 @@ export function Projector({ session, waiting, onClose }: { session: ExamSession;
   return createPortal(
     <div className="fixed inset-0 z-[60] flex flex-col bg-brand-deep text-white" role="dialog" aria-modal="true" aria-label="Código del examen para proyectar">
       <div className="flex items-center justify-between px-[4vw] py-[3vh]">
-        <span className="inline-flex rounded bg-white px-3 py-2">
-          <Logo className="h-[5vh] min-h-8" />
-        </span>
+        <Logo className="h-[6vh] min-h-9" onDark />
         <button onClick={onClose} className="btn btn-sm border-white/25 bg-white/10 text-white hover:bg-white/20" aria-label="Cerrar vista de proyector">
           <X size={16} /> Cerrar
         </button>

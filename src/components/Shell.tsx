@@ -42,7 +42,7 @@ export function Shell({
       >
         <div className="mx-auto flex h-16 w-full max-w-[640px] items-center justify-between gap-4 px-4">
           <a href="/" aria-label="Evaluación ESSA, inicio">
-            <Logo className="h-9 sm:h-10" chip={brand} />
+            <Logo className="h-9 sm:h-10" onDark={brand} />
           </a>
           <div className="flex items-center gap-3">
             {context}

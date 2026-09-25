@@ -235,9 +235,7 @@ function AuthScreen({ children }: { children: ReactNode }) {
   return (
     <div className="grid h-full lg:grid-cols-[1fr_minmax(0,560px)]">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-deep p-12 text-white lg:flex">
-        <div className="inline-flex w-fit rounded bg-white px-3 py-2">
-          <Logo className="h-10" />
-        </div>
+        <Logo className="h-11 self-start" onDark />
         <div>
           <p className="display text-6xl leading-[0.95]">
             Panel del

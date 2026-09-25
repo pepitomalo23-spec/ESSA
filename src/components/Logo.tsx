@@ -1,15 +1,16 @@
 import { useState } from "react";
 
-// `chip`: sobre fondo oscuro el logotipo va en su placa blanca, como en el modo oscuro.
-export function Logo({ className = "h-10", chip = false }: { className?: string; chip?: boolean }) {
+// Logotipo sin placa: sobre fondo claro, el original; sobre fondo oscuro (modo oscuro, banda azul o proyector),
+// la versión con las letras y el nadador en blanco.
+export function Logo({ className = "h-10", onDark = false }: { className?: string; onDark?: boolean }) {
   const [broken, setBroken] = useState(false);
-  if (broken) return <span className={`display text-xl ${chip ? "text-white" : "text-ink"}`}>ESSA</span>;
+  const alt = "Escuela de Salvamento y Socorrismo Acuático";
+  if (broken) return <span className={`display text-xl ${onDark ? "text-white" : "text-ink"}`}>ESSA</span>;
+  if (onDark) return <img src="/logo-light.png" alt={alt} className={`${className} w-auto`} onError={() => setBroken(true)} />;
   return (
-    <img
-      src="/logo.png"
-      alt="Escuela de Salvamento y Socorrismo Acuático"
-      className={`${className} w-auto ${chip ? "rounded bg-white px-1.5 py-1" : "dark:rounded dark:bg-white dark:px-1.5 dark:py-1"}`}
-      onError={() => setBroken(true)}
-    />
+    <>
+      <img src="/logo.png" alt={alt} className={`${className} w-auto dark:hidden`} onError={() => setBroken(true)} />
+      <img src="/logo-light.png" alt={alt} className={`${className} hidden w-auto dark:block`} onError={() => setBroken(true)} />
+    </>
   );
 }
