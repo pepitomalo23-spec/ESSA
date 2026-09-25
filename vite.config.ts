@@ -19,7 +19,7 @@ const PAGES = {
     title: "Evaluación ESSA · Acceso al examen",
     shareTitle: "Evaluación ESSA · Acceso al examen",
     description: "Entra a tu examen desde el móvil con el código de 6 cifras que te da tu instructor.",
-    image: "/og-alumnos.jpg",
+    image: "/og-alumnos-examen.jpg",
     alt: "Acceso al examen de la Escuela de Salvamento y Socorrismo Acuático",
     manifest: "/manifest.webmanifest",
     appTitle: "ESSA",
