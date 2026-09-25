@@ -2,7 +2,6 @@ import { WifiOff } from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { useOnline } from "../lib/useOnline";
 import { Logo } from "./Logo";
-import { ThemeToggle } from "./ThemeToggle";
 
 // Marco de la parte del alumno, como una app: la cabecera no se mueve y solo desplaza el contenido.
 // Con `hero`, la cabecera se funde con la banda azul de bienvenida y el azul sigue más allá del borde al estirar.
@@ -44,10 +43,7 @@ export function Shell({
           <a href="/" aria-label="Evaluación ESSA, inicio">
             <Logo className="h-9 sm:h-10" onDark={brand} />
           </a>
-          <div className="flex items-center gap-3">
-            {context}
-            <ThemeToggle className={brand ? "text-white/75 hover:bg-white/10 hover:text-white" : ""} />
-          </div>
+          {context}
         </div>
         {!online && (
           <div className="border-t border-amber/30 bg-amber-soft" role="status">

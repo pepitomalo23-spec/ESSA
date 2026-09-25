@@ -44,8 +44,15 @@ electrocardiograma) y todas sus funciones, más seguridad real y varias mejoras.
 - **Recarga segura**: si el alumno recarga la página, vuelve a su examen donde lo dejó.
 - **Historial fiel**: cada resultado guarda las preguntas tal como eran, aunque luego se editen.
 - **Alumnos autorizados funciona de verdad**: con la lista activa se pide el email y solo entran los de la lista.
-- Modo oscuro, diálogos propios en lugar de ventanas del navegador, y accesibilidad (teclado, lectores de pantalla).
-- Aviso de «sin conexión», icono propio para añadir la app a la pantalla de inicio del móvil y título en cada pestaña.
+- Diálogos propios en lugar de ventanas del navegador, y accesibilidad (teclado, lectores de pantalla).
+- Aviso de «sin conexión» y título en cada pestaña.
+- **Instalar como app**: la primera vez que un instructor entra en `/personal` le sale un aviso para ponerla en la
+  pantalla de inicio (con un toque en Android y en Chrome/Edge; en iPhone, con los pasos de Safari). Si lo cierra,
+  la tiene siempre en «Instalar app». Instalada desde el panel, abre directamente `/personal`.
+- **Vista previa al compartir** (WhatsApp, Telegram…): el enlace de alumnos (`/`, también el del QR) muestra la imagen
+  del acceso al examen, y el de instructores (`/personal`) la del panel del personal. Las imágenes están en
+  `public/og-*.jpg`. En Vercel la dirección completa de la imagen se toma sola del dominio de producción; fuera de
+  Vercel, define `VITE_SITE_URL` (p. ej. `https://examen.essa.es`) al compilar.
 
 ## Puesta en marcha
 

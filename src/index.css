@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 /* Pantallas bajas (iPhone SE con las barras del navegador): se recorta la bienvenida para que el acceso quepa entero */
 @custom-variant short (@media (max-height: 620px));
 
@@ -56,53 +55,6 @@
   --focus: #2f6fd6;
   --brand-deep: #0f2c52;
   color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0b121c;
-    --surface: #111a26;
-    --sunken: #0e1621;
-    --ink: #e8edf3;
-    --ink2: #b8c3cf;
-    --muted: #8190a2;
-    --line: #1f2b3b;
-    --line-strong: #2e3d52;
-    --navy: #a9c4ef;
-    --navy-soft: #152338;
-    --on-navy: #0b121c;
-    --red: #ef5b52;
-    --red-soft: #2a1719;
-    --green: #4bbf87;
-    --green-soft: #11261d;
-    --amber: #f0b429;
-    --amber-soft: #2a2211;
-    --focus: #7aa7f5;
-    --brand-deep: #0c1a2e;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #0b121c;
-  --surface: #111a26;
-  --sunken: #0e1621;
-  --ink: #e8edf3;
-  --ink2: #b8c3cf;
-  --muted: #8190a2;
-  --line: #1f2b3b;
-  --line-strong: #2e3d52;
-  --navy: #a9c4ef;
-  --navy-soft: #152338;
-  --on-navy: #0b121c;
-  --red: #ef5b52;
-  --red-soft: #2a1719;
-  --green: #4bbf87;
-  --green-soft: #11261d;
-  --amber: #f0b429;
-  --amber-soft: #2a2211;
-  --focus: #7aa7f5;
-  --brand-deep: #0c1a2e;
-  color-scheme: dark;
 }
 
 html {

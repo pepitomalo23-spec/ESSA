@@ -1,6 +1,14 @@
 {
   "rewrites": [
     {
+      "source": "/personal",
+      "destination": "/personal.html"
+    },
+    {
+      "source": "/personal/(.*)",
+      "destination": "/personal.html"
+    },
+    {
       "source": "/((?!assets/|.*\\..*).*)",
       "destination": "/index.html"
     }

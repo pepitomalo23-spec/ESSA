@@ -1,14 +1,15 @@
 import type { Session } from "@supabase/supabase-js";
 import { AnimatePresence } from "motion/react";
-import { BarChart3, ClipboardList, ExternalLink, History, KeyRound, ListChecks, LoaderCircle, LogOut, MapPin, Menu, Settings, UserCheck, Users, X } from "lucide-react";
+import { BarChart3, ClipboardList, Download, ExternalLink, History, KeyRound, ListChecks, LoaderCircle, LogOut, MapPin, Menu, Settings, UserCheck, Users, X } from "lucide-react";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { Dialog } from "../components/Dialog";
+import { InstallPrompt } from "../components/InstallPrompt";
 import { Logo } from "../components/Logo";
 import { Screen } from "../components/Screen";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { api, errorMessage, staffAdmin, type Staff } from "../lib/api";
 import { supabase } from "../lib/supabase";
+import { openInstall, useInstall } from "../lib/install";
 import { scrollToTop } from "../lib/scroll";
 import { useTitle } from "../lib/useTitle";
 import { AdminTabs, type AdminTab } from "./AdminTabs";
@@ -32,6 +33,24 @@ const ADMIN_NAV = [
 ] as const;
 
 export default function StaffApp() {
+  // Instalado desde aquí, el icono abre directamente el panel del personal.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    if (!link) return;
+    const before = link.href;
+    link.href = "/manifest-personal.webmanifest";
+    return () => void (link.href = before);
+  }, []);
+
+  return (
+    <>
+      <StaffScreens />
+      <InstallPrompt />
+    </>
+  );
+}
+
+function StaffScreens() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [me, setMe] = useState<Staff | null | undefined>(undefined);
   const [setupNeeded, setSetupNeeded] = useState(false);
@@ -188,6 +207,7 @@ function UserBox({ me }: { me: Staff }) {
   const [password, setPassword] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const { installed } = useInstall();
 
   async function change() {
     if (password.length < 8) return setMsg({ ok: false, text: "Mínimo 8 caracteres." });
@@ -208,9 +228,13 @@ function UserBox({ me }: { me: Staff }) {
           <p className="truncate text-[15px] font-semibold text-ink">{me.name}</p>
           <p className="truncate text-sm text-muted">{me.role === "admin" ? "Administrador" : "Instructor"}</p>
         </div>
-        <ThemeToggle />
       </div>
       <div className="mt-1 grid grid-cols-2 gap-1">
+        {!installed && (
+          <button className="btn btn-ghost btn-sm col-span-2 justify-start" onClick={openInstall}>
+            <Download size={15} /> Instalar app
+          </button>
+        )}
         <button className="btn btn-ghost btn-sm justify-start" onClick={() => (setOpen(true), setMsg(null))}>
           <KeyRound size={15} /> Contraseña
         </button>
@@ -232,6 +256,7 @@ function UserBox({ me }: { me: Staff }) {
 
 // Pantalla partida: a la izquierda la marca, a la derecha el formulario.
 function AuthScreen({ children }: { children: ReactNode }) {
+  const { installed } = useInstall();
   return (
     <div className="grid h-full lg:grid-cols-[1fr_minmax(0,560px)]">
       <div className="relative hidden flex-col justify-between overflow-hidden bg-brand-deep p-12 text-white lg:flex">
@@ -254,17 +279,21 @@ function AuthScreen({ children }: { children: ReactNode }) {
           <span className="lg:hidden">
             <Logo className="h-9" />
           </span>
-          <ThemeToggle />
         </div>
         <div className="flex flex-1 items-center px-6 pb-16 sm:px-12">
           <div className="w-full max-w-sm">
             <Screen>{children}</Screen>
           </div>
         </div>
-        <div className="px-6 pb-6 text-sm text-muted sm:px-12">
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-sm text-muted sm:px-12">
           <Link to="/" className="hover:text-ink">
             ← Volver al acceso de alumnos
           </Link>
+          {!installed && (
+            <button className="inline-flex cursor-pointer items-center gap-1.5 font-medium text-ink2 hover:text-ink" onClick={openInstall}>
+              <Download size={14} /> Instalar app
+            </button>
+          )}
         </div>
       </div>
     </div>
