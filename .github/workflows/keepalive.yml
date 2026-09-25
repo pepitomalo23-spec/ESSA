@@ -1,0 +1,22 @@
+name: Mantener activa la base de datos
+
+# Respaldo de la visita diaria de Vercel (api/keepalive.js): Supabase pausa los proyectos gratuitos tras 7 días
+# sin actividad. GitHub desactiva las tareas programadas si el repositorio pasa 60 días sin cambios; basta con
+# volver a activarla en la pestaña Actions.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Consulta ligera a Supabase
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://gepwhdcghtrmzteiuizq.supabase.co' }}
+          SUPABASE_KEY: ${{ vars.SUPABASE_KEY || 'sb_publishable_ypO_80xaiaOee3R9RDEgpA_6XLg_KKS' }}
+        run: |
+          curl --fail --silent --show-error --retry 3 --retry-delay 20 \
+            -X POST "$SUPABASE_URL/rest/v1/rpc/public_info" \
+            -H "apikey: $SUPABASE_KEY" -H "Content-Type: application/json" -d '{}' -o /dev/null -w "HTTP %{http_code}\n"

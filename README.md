@@ -76,6 +76,18 @@ desaparece y ya puedes dar de alta a los instructores desde la pestaña *Persona
 Los alumnos no tienen cuenta: solo pueden llamar a las funciones del examen con el token de su intento. El personal
 solo lee datos si su cuenta está en la tabla `staff`.
 
+## Que Supabase no se pause (plan gratuito)
+
+Supabase pausa los proyectos gratuitos tras 7 días sin actividad. Para evitarlo, la web hace una consulta ligera
+cada día:
+
+- **Vercel Cron** llama a `/api/keepalive` todos los días (`crons` en `vercel.json`). Opcional: define
+  `CRON_SECRET` en Vercel para que solo Vercel pueda lanzarla.
+- **GitHub Actions** (`.github/workflows/keepalive.yml`) hace lo mismo como respaldo. GitHub desactiva las tareas
+  programadas si el repositorio pasa 60 días sin cambios: se reactiva en la pestaña *Actions*.
+
+Si la base de datos pasa a un plan de pago, se puede dejar tal cual o borrar.
+
 ## Despliegue
 
 Preparado para Vercel (`vercel.json`: rutas de la app y cabeceras de seguridad). Cada push a `main` se publica si el
