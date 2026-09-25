@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { Breakdown } from "../components/Breakdown";
 import { Dialog } from "../components/Dialog";
 import { EcgProgress } from "../components/Ecg";
+import { GoogleReview } from "../components/GoogleReview";
 import { PinInput } from "../components/PinInput";
 import { Screen } from "../components/Screen";
 import { Shell } from "../components/Shell";
@@ -628,13 +629,7 @@ function Result({ attempt, result, info, onHome }: { attempt: Saved; result: Fin
       ) : (
         <div className="sheet p-5 sm:p-7">
           {review ? (
-            <>
-              <h2 className="display text-2xl text-ink">¡Gracias! ¿Nos dejas una reseña?</h2>
-              <p className="mt-1 text-[15px] text-ink2">Una reseña en Google ayuda a otros alumnos a encontrarnos. Solo lleva un minuto.</p>
-              <a href={info!.google_review_url!} target="_blank" rel="noopener noreferrer" className="btn btn-primary mt-5">
-                Escribir reseña en Google <ArrowRight size={16} />
-              </a>
-            </>
+            <GoogleReview url={info!.google_review_url!} comment={comment} rating={rating} />
           ) : (
             <>
               <h2 className="display text-2xl text-ink">Gracias por tu valoración</h2>
